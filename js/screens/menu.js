@@ -19,26 +19,153 @@ App.screens = App.screens || {};
     });
   }
 
+  // 試合1件の追加・編集シート(実際の日程を手入力で登録)
+  function openMatchSheet(team, match) {
+    const isEdit = !!match;
+    const opponentInput = App.el("input", { type: "text", value: isEdit ? match.opponent : "", placeholder: "例:浦和レッズ" });
+    const dateInput = App.el("input", { type: "date", value: isEdit ? match.date : App.date.today() });
+    let time = isEdit ? match.time : "14:00";
+    const timeField = App.timeField("キックオフ時間", time, (v) => (time = v));
+    let venue = isEdit ? match.venue : "home";
+    const venueChips = App.chipSelect(
+      [{ value: "home", label: "ホーム" }, { value: "away", label: "アウェイ" }],
+      venue,
+      (v) => (venue = v)
+    );
+    const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "試合を追加" });
+    const content = [
+      App.field("対戦相手", opponentInput),
+      App.field("日付", dateInput),
+      timeField,
+      App.el("div", { class: "field" }, [App.el("span", { class: "field__label", text: "ホーム/アウェイ" }), venueChips]),
+      saveBtn,
+    ];
+    if (isEdit) {
+      const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この試合を削除</span>" });
+      del.addEventListener("click", () => {
+        App.confirm({
+          title: "試合を削除しますか?",
+          message: `「${match.title}」を削除します。この操作は取り消せません。`,
+          okLabel: "削除する",
+          danger: true,
+          onOk: () => {
+            s.close();
+            App.store.update((st2) => { st2.events = st2.events.filter((e) => e.id !== match.id); });
+            App.toast("削除しました", "trash");
+          },
+        });
+      });
+      content.push(del);
+    }
+    const s = App.sheet(isEdit ? "試合を編集" : "試合を追加", content);
+    saveBtn.addEventListener("click", () => {
+      const opponent = opponentInput.value.trim();
+      if (!opponent) { opponentInput.focus(); App.toast("対戦相手を入力してください", "info"); return; }
+      s.close();
+      const title = `⚽ ${team} vs ${opponent}(${venue === "home" ? "ホーム" : "アウェイ"})`;
+      App.store.update((st2) => {
+        if (isEdit) {
+          const e = st2.events.find((x) => x.id === match.id);
+          if (e) Object.assign(e, { title, date: dateInput.value, time, opponent, venue, kind: "match" });
+        } else {
+          st2.events.push({
+            id: App.uid(), title, date: dateInput.value, time, opponent, venue,
+            memberIds: st2.family.map((m) => m.id), kind: "match",
+          });
+        }
+      });
+      App.toast(isEdit ? "変更しました" : "試合をカレンダーに追加しました", "calendar");
+    });
+  }
+
+  // 柏レイソル 2026シーズン(明治安田J1リーグ+ルヴァンカップ)の実際の日程。
+  // J.League公式サイト(jleague.jp)より2026-07-14時点で確認・取得。
+  // 天皇杯2回戦(8/26)は対戦相手が未定のため含めない。
+  // ホーム/アウェイの試合日が「◯日 or ◯日+1」となっているものと、
+  // キックオフ時間が「AFCクラブ競技会の抽選会(8/18)後に確定」となっているものはメモに理由を残す。
+  const KASHIWA_2026_FIXTURES = [
+    { date: "2026-08-08", time: "19:00", opponent: "水戸", venue: "home", memo: "明治安田J1リーグ 第1節" },
+    { date: "2026-08-14", time: "19:00", opponent: "東京Ｖ", venue: "away", memo: "明治安田J1リーグ 第2節" },
+    { date: "2026-08-21", time: "19:00", opponent: "長崎", venue: "home", memo: "明治安田J1リーグ 第3節" },
+    { date: "2026-08-29", time: "18:30", opponent: "清水", venue: "away", memo: "明治安田J1リーグ 第4節" },
+    { date: "2026-09-02", time: "19:00", opponent: "Ｃ大阪", venue: "away", memo: "明治安田J1リーグ 第5節" },
+    { date: "2026-09-06", time: "19:00", opponent: "横浜FM", venue: "home", memo: "明治安田J1リーグ 第6節" },
+    { date: "2026-09-12", time: "", opponent: "京都", venue: "away", memo: "明治安田J1リーグ 第7節(9/12土 or 9/13日。キックオフ時間未定)" },
+    { date: "2026-09-20", time: "17:00", opponent: "町田", venue: "away", memo: "明治安田J1リーグ 第8節" },
+    { date: "2026-10-03", time: "19:00", opponent: "Ｇ大阪", venue: "home", memo: "ルヴァンカップ4回戦(10/3土 or 10/4日)" },
+    { date: "2026-10-09", time: "19:00", opponent: "神戸", venue: "home", memo: "明治安田J1リーグ 第9節" },
+    { date: "2026-10-17", time: "", opponent: "名古屋", venue: "home", memo: "明治安田J1リーグ 第10節(10/17土 or 10/18日。キックオフ時間未定・AFC抽選8/18後に確定)" },
+    { date: "2026-10-21", time: "19:00", opponent: "FC東京", venue: "away", memo: "明治安田J1リーグ 第11節" },
+    { date: "2026-10-24", time: "15:00", opponent: "鹿島", venue: "away", memo: "明治安田J1リーグ 第12節(10/24土 or 10/25日)" },
+    { date: "2026-10-31", time: "", opponent: "浦和", venue: "home", memo: "明治安田J1リーグ 第13節(10/31土 or 11/1日。キックオフ時間未定・AFC抽選8/18後に確定)" },
+    { date: "2026-11-07", time: "", opponent: "川崎Ｆ", venue: "home", memo: "明治安田J1リーグ 第14節(11/7土 or 11/8日。キックオフ時間未定・AFC抽選8/18後に確定)" },
+    { date: "2026-11-20", time: "19:00", opponent: "千葉", venue: "home", memo: "明治安田J1リーグ 第15節" },
+    { date: "2026-11-28", time: "", opponent: "広島", venue: "home", memo: "明治安田J1リーグ 第17節(11/28土 or 11/29日。キックオフ時間未定・AFC抽選8/18後に確定)" },
+    { date: "2026-12-05", time: "", opponent: "福岡", venue: "home", memo: "明治安田J1リーグ 第18節(12/5土 or 12/6日。キックオフ時間未定・AFC抽選8/18後に確定)" },
+    { date: "2026-12-13", time: "14:00", opponent: "岡山", venue: "away", memo: "明治安田J1リーグ 第19節" },
+    { date: "2026-12-16", time: "19:00", opponent: "Ｇ大阪", venue: "away", memo: "明治安田J1リーグ 第16節" },
+    { date: "2026-12-19", time: "16:00", opponent: "川崎Ｆ", venue: "away", memo: "明治安田J1リーグ 第20節" },
+  ];
+
   // 応援チームの試合予定
   // 正式版ではJリーグ公式日程との自動連携(GAS経由)を予定。
-  // 現在はサンプル日程の取り込みでカレンダー登録の流れを確認できる。
+  // 今はチーム名の保存+試合の手入力(実際の日程)。柏レイソルのみ公式日程の一括登録に対応。
   function openTeamSheet() {
     const st = App.store.state;
     const teamInput = App.el("input", { type: "text", value: st.settings.favoriteTeam || "", placeholder: "例:川崎フロンターレ" });
     const saveBtn = App.el("button", { class: "btn-primary", text: "チームを保存" });
-    const importBtn = App.el("button", {
+    const addMatchBtn = App.el("button", {
       class: "btn-secondary",
       style: "margin-top: var(--spacing-3);",
-      html: App.icon("calendar", 18) + "<span>サンプル日程を取り込む(3試合)</span>",
+      html: App.icon("plus", 18) + "<span>試合を追加(実際の日程)</span>",
     });
+    const isKashiwaTeam = (name) => (name || "").includes("柏レイソル");
+    const importBtn = App.el("button", {
+      class: "section-header__action",
+      style: "margin-top: var(--spacing-3);",
+    });
+    const syncImportLabel = () => {
+      importBtn.innerHTML = isKashiwaTeam(teamInput.value)
+        ? App.icon("calendar", 14) + `<span>柏レイソルの2026シーズン日程を登録する(${KASHIWA_2026_FIXTURES.length}試合)</span>`
+        : App.icon("calendar", 14) + "<span>お試し用のサンプル日程を取り込む(3試合)</span>";
+    };
+    teamInput.addEventListener("input", syncImportLabel);
+    syncImportLabel();
+
+    // 登録済みの試合一覧(このチームの kind:"match" イベントを日付順に)
+    const upcoming = st.events
+      .filter((e) => e.kind === "match")
+      .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+    const matchList = App.el("div", { class: "field" });
+    if (upcoming.length > 0) {
+      matchList.appendChild(App.el("span", { class: "field__label", text: "登録済みの試合" }));
+      const listCard = App.el("div", {});
+      upcoming.forEach((m) => {
+        listCard.appendChild(
+          App.el("button", {
+            class: "schedule-item",
+            style: "width:100%; text-align:left;",
+            "aria-label": `${m.title}を編集`,
+            onclick: () => { s.close(); openMatchSheet(st.settings.favoriteTeam || "応援チーム", m); },
+          }, [
+            App.el("span", { class: "schedule-item__time", text: App.fmtDate(m.date, { weekday: false }) }),
+            App.el("span", { class: "schedule-item__title", text: m.title.replace(/^⚽\s*/, "") }),
+          ])
+        );
+      });
+      matchList.appendChild(listCard);
+    }
+
     const s = App.sheet("応援チームの試合予定", [
       App.el("p", {
         style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);",
-        text: "正式版では公式の試合日程と自動で連携する予定です。いまはサンプル日程で、カレンダーに登録される流れを確認できます。",
+        text: "対戦相手・日時を入力すると、その試合がカレンダーに登録されます。正式版では公式日程との自動連携を予定しています。",
       }),
       App.field("応援しているチーム", teamInput),
       saveBtn,
+      addMatchBtn,
       importBtn,
+      matchList,
     ]);
     const saveTeam = () => {
       const team = teamInput.value.trim();
@@ -54,10 +181,35 @@ App.screens = App.screens || {};
       App.refresh();
       App.toast(`応援チームを「${team}」にしました`, "heart");
     });
+    addMatchBtn.addEventListener("click", () => {
+      const team = saveTeam();
+      if (!team) return;
+      s.close();
+      openMatchSheet(team, null);
+    });
     importBtn.addEventListener("click", () => {
       const team = saveTeam();
       if (!team) return;
       s.close();
+      if (isKashiwaTeam(team)) {
+        App.store.update((st2) => {
+          KASHIWA_2026_FIXTURES.forEach((f) => {
+            st2.events.push({
+              id: App.uid(),
+              title: `⚽ ${team} vs ${f.opponent}(${f.venue === "home" ? "ホーム" : "アウェイ"})`,
+              date: f.date,
+              time: f.time,
+              opponent: f.opponent,
+              venue: f.venue,
+              memo: f.memo,
+              memberIds: st2.family.map((m) => m.id),
+              kind: "match",
+            });
+          });
+        });
+        App.toast(`${KASHIWA_2026_FIXTURES.length}試合をカレンダーに登録しました`, "calendar");
+        return;
+      }
       const fixtures = [
         { days: 6, time: "14:00", note: "ホーム" },
         { days: 13, time: "19:00", note: "アウェイ" },
