@@ -6,5 +6,5 @@
 window.APP_CONFIG = {
   APP_NAME: "わが家ホーム",
   VERSION: "0.6.1",
-  LIFF_ID: "", // 例: "1234567890-AbcdEfgh"
+  LIFF_ID: "2010693415-ddc2Kd3X",
 };
