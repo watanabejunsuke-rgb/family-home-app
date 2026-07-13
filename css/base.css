@@ -1,0 +1,78 @@
+/* ============================================
+   ベーススタイル — リセットとアプリ骨格
+   ============================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--text-body);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, p, ul, ol { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+input, textarea, select {
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--color-text);
+}
+img { max-width: 100%; display: block; }
+
+/* フォーカスリングは消さない */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- アプリ骨格(スマホ優先・PCでは中央480px) ---- */
+#app {
+  max-width: var(--app-max-width);
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background);
+}
+
+#app-header {
+  padding: calc(var(--spacing-4) + env(safe-area-inset-top)) var(--spacing-5) 0;
+}
+
+#screen {
+  flex: 1;
+  padding: 0 var(--spacing-5)
+    calc(var(--nav-height) + var(--spacing-6) + env(safe-area-inset-bottom));
+  outline: none;
+}
+
+/* 画面切り替え時のごく軽いフェード */
+#screen.entering { animation: screen-in var(--t-med) both; }
+@keyframes screen-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

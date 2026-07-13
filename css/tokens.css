@@ -1,0 +1,95 @@
+/* ============================================
+   デザイントークン — わが家ホーム
+   すべての色・余白・角丸・影・文字サイズはここから参照する。
+   コンポーネントへの直接ハードコード禁止。
+   ============================================ */
+:root {
+  /* --- 基本色 --- */
+  --color-background: #F8F7F3;
+  --color-surface: #FFFFFF;
+  --color-primary: #5E7B71;
+  --color-primary-strong: #4E685F;   /* press時 */
+  --color-primary-light: #E8F0EC;
+  --color-accent: #D6B27A;
+  --color-accent-light: #F4E9D7;
+  --color-text: #2B2B2B;
+  --color-text-secondary: #747474;
+  --color-text-muted: #9A9A96;
+  --color-border: #E8E5DE;
+  --color-divider: #EFEDE8;
+  --color-on-primary: #FFFFFF;
+
+  /* --- 状態色 --- */
+  --color-success: #668B73;
+  --color-success-bg: #EAF2EC;
+  --color-warning: #B4874F;
+  --color-warning-bg: #F7EEDD;
+  --color-error: #B96862;
+  --color-error-bg: #F8E8E6;
+  --color-info: #66869A;
+  --color-info-bg: #E8F0F4;
+
+  /* --- カテゴリ別アクセント(アイコン・ラベル・細ライン・薄背景のみに使用) --- */
+  --cat-family: #D6A85F;       --cat-family-bg: #F8F0E1;
+  --cat-calendar: #718D83;     --cat-calendar-bg: #EAF1EE;
+  --cat-task: #7E8760;         --cat-task-bg: #EEF1E6;
+  --cat-shopping: #B88562;     --cat-shopping-bg: #F6ECE3;
+  --cat-plant: #6E8E69;        --cat-plant-bg: #EAF2E9;
+  --cat-note: #8A7D91;         --cat-note-bg: #F0EDF2;
+  --cat-ai: #71879B;           --cat-ai-bg: #EAF0F4;
+
+  /* --- メンバー識別色(頭文字バッジ用。家族の並び順に1→6を割り当て、7人目以降は循環) --- */
+  --member-1: #B4874F;  --member-1-bg: #F7EEDD;   /* あたたかい琥珀 */
+  --member-2: #66869A;  --member-2-bg: #E8F0F4;   /* おだやかな青 */
+  --member-3: #6E8E69;  --member-3-bg: #EAF2E9;   /* やわらかい緑 */
+  --member-4: #8A7D91;  --member-4-bg: #F0EDF2;   /* くすんだ紫 */
+  --member-5: #B88562;  --member-5-bg: #F6ECE3;   /* テラコッタ */
+  --member-6: #7E8760;  --member-6-bg: #EEF1E6;   /* オリーブ */
+
+  /* --- 余白(8px基準) --- */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+
+  /* --- 角丸 --- */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  /* --- 影(極めて弱く) --- */
+  --shadow-card: 0 4px 16px rgba(45, 45, 40, 0.04);
+  --shadow-raised: 0 6px 20px rgba(45, 45, 40, 0.10);
+
+  /* --- タイポグラフィ --- */
+  --font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+    "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  --text-page-title: 24px;
+  --text-heading: 20px;
+  --text-section: 16px;
+  --text-body: 15px;
+  --text-sub: 13px;
+  --text-caption: 12px;
+  --line-height: 1.6;
+
+  /* --- z-index --- */
+  --z-fab: 50;
+  --z-nav: 60;
+  --z-overlay: 100;
+  --z-sheet: 101;
+  --z-toast: 110;
+
+  /* --- モーション --- */
+  --t-fast: 150ms ease-out;
+  --t-med: 250ms ease-out;
+  --t-sheet: 300ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* --- レイアウト --- */
+  --app-max-width: 480px;
+  --nav-height: 64px;
+  --tap-target: 44px;
+}
