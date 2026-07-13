@@ -180,36 +180,67 @@ App.screens = App.screens || {};
       ]);
       container.appendChild(nav);
 
-      // ---- 月グリッド ----
+      // ---- 月グリッド(月曜始まり) ----
       const grid = App.el("div", { class: "cal-grid card card--lg", role: "grid" });
-      ["日", "月", "火", "水", "木", "金", "土"].forEach((w) =>
-        grid.appendChild(App.el("span", { class: "cal-grid__wd", text: w }))
-      );
+      ["月", "火", "水", "木", "金", "土", "日"].forEach((w, i) => {
+        const cls = i === 5 ? " cal-grid__wd--sat" : i === 6 ? " cal-grid__wd--sun" : "";
+        grid.appendChild(App.el("span", { class: "cal-grid__wd" + cls, text: w }));
+      });
+
+      // 日付ごとの予定をまとめておく(セルごとに毎回全件走査しない)
+      const eventsByDate = new Map();
+      App.store.state.events.forEach((e) => {
+        if (!eventsByDate.has(e.date)) eventsByDate.set(e.date, []);
+        eventsByDate.get(e.date).push(e);
+      });
+
       const first = new Date(view.year, view.month, 1);
+      const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
+      const offsetToMonday = (first.getDay() + 6) % 7; // 月曜始まりでの1日のズレ
+      const totalCells = Math.ceil((offsetToMonday + daysInMonth) / 7) * 7;
       const start = new Date(first);
-      start.setDate(1 - first.getDay());
-      for (let i = 0; i < 42; i++) {
+      start.setDate(1 - offsetToMonday);
+
+      const MAX_CHIPS = 3;
+      for (let i = 0; i < totalCells; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
         const ds = App.date.str(d);
         const inMonth = d.getMonth() === view.month;
-        const hasEvents = App.store.state.events.some((e) => e.date === ds);
+        const dow = d.getDay(); // 0=日〜6=土
+        const holidayName = App.holidayName(ds);
+        const dayEvents = (eventsByDate.get(ds) || []).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+
+        let weekendClass = "";
+        if (dow === 0) weekendClass = " cal-day--sun";
+        else if (dow === 6) weekendClass = " cal-day--sat";
+        else if (holidayName) weekendClass = " cal-day--holiday";
+
+        const eventsWrap = App.el("div", { class: "cal-day__events" });
+        if (dayEvents.length <= MAX_CHIPS) {
+          dayEvents.forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: e.title })));
+        } else {
+          dayEvents.slice(0, MAX_CHIPS - 1).forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: e.title })));
+          eventsWrap.appendChild(App.el("span", { class: "cal-day__more", text: `+${dayEvents.length - (MAX_CHIPS - 1)}件` }));
+        }
+
         const cell = App.el("button", {
-          class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : ""),
+          class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
           "aria-pressed": String(ds === view.selected),
-          "aria-label": `${d.getMonth() + 1}月${d.getDate()}日${hasEvents ? "(予定あり)" : ""}`,
+          "aria-label": `${d.getMonth() + 1}月${d.getDate()}日${holidayName ? "・" + holidayName : ""}${dayEvents.length ? "(予定あり)" : ""}`,
           onclick: () => { view.selected = ds; App.refresh(); },
         }, [
-          App.el("span", { text: String(d.getDate()) }),
-          hasEvents ? App.el("span", { class: "cal-day__dot" }) : null,
+          App.el("span", { class: "cal-day__date", text: String(d.getDate()) }),
+          eventsWrap,
         ]);
         grid.appendChild(cell);
       }
       container.appendChild(grid);
 
       // ---- 選択日の予定 ----
+      const selectedHoliday = App.holidayName(view.selected);
       const daySection = App.el("section", { class: "section" }, [
-        App.sectionHeader(`${App.fmtDate(view.selected)}の予定`, { icon: "calendar" }),
+        App.sectionHeader(`${App.fmtDate(view.selected)}${selectedHoliday ? "・" + selectedHoliday : ""}の予定`, { icon: "calendar" }),
       ]);
       const events = App.data.eventsOn(view.selected);
       const card = App.el("div", { class: "card card--lg" });
