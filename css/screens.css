@@ -145,7 +145,8 @@
 .cal-nav__label { font-size: var(--text-section); font-weight: 700; }
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /* minmax(0, 1fr): 長い予定名でも列がその分だけ広がらないようにする(既定のfrはauto最小幅を持つため) */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
 }
 .cal-grid__wd {
@@ -159,6 +160,8 @@
 .cal-grid__wd--sun { color: var(--cal-sun); }
 .cal-day {
   min-height: 78px;
+  min-width: 0; /* グリッド項目の既定min-width:autoを解除し、列幅を守る */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -203,6 +206,7 @@
 }
 .cal-day__chip {
   display: block;
+  min-width: 0;
   font-size: 10px;
   line-height: 1.3;
   padding: 1px 3px;
