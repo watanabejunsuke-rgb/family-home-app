@@ -58,6 +58,11 @@ img { max-width: 100%; display: block; }
 #app-header {
   padding: calc(var(--spacing-4) + env(safe-area-inset-top)) var(--spacing-5) 0;
 }
+/* 見出しを画面側で兼ねる場合(カレンダー等)は、セーフエリア確保分だけに詰める。
+   LINEアプリ内ブラウザ自体のヘッダーで既に上部が占有されているため。 */
+#app-header.app-header--compact {
+  padding-top: calc(var(--spacing-2) + env(safe-area-inset-top));
+}
 
 #screen {
   flex: 1;

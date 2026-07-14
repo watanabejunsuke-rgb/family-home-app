@@ -32,7 +32,8 @@ window.App = window.App || {};
 
     // 画面自身が見出しを兼ねるコンテンツを持つ場合(カレンダーの月表示など)、
     // 共通ヘッダーは表示しない。ただしセーフエリア分の余白は#app-headerの
-    // paddingとして残るので、ノッチにコンテンツが被ることはない
+    // paddingとして残すので、ノッチにコンテンツが被ることはない(圧縮版のpadding)
+    header.classList.toggle("app-header--compact", !!screen.noHeader);
     if (screen.noHeader) return;
 
     if (screen.greeting) {

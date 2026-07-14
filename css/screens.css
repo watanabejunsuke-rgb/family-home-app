@@ -137,12 +137,12 @@
 
 /* ---- カレンダー ---- */
 .cal-nav {
-  /* 共通ヘッダーの代わりにこの月ナビ自体がページ見出しを兼ねる */
+  /* 共通ヘッダーの代わりにこの月ナビ自体がページ見出しを兼ねる。
+     LINE内ブラウザ自体のヘッダーで上部が占有されるため上下を詰める */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
-  margin-bottom: var(--spacing-3);
+  margin-bottom: var(--spacing-2);
 }
 .cal-nav__label { font-size: var(--text-page-title); font-weight: 700; }
 .cal-grid {
