@@ -5,6 +5,13 @@ window.App = window.App || {};
 App.screens = App.screens || {};
 
 (function () {
+  // マス内の予定名は「…」で削ると実質2〜3文字しか見えなくなるため、
+  // 絵文字(サロゲートペア)も壊さずに固定文字数で切り落とす
+  function clipChars(text, n) {
+    const chars = [...text];
+    return chars.length > n ? chars.slice(0, n).join("") : text;
+  }
+
   // 画面をまたいで保持する表示状態
   const view = {
     year: null,
@@ -151,13 +158,16 @@ App.screens = App.screens || {};
   App.screens.calendar = {
     title: "カレンダー",
     nav: "calendar",
+    // 「カレンダー」という見出しは下部ナビのタブと重複して冗長なため、
+    // 共通ヘッダーは出さず、月ナビ(2026年7月 など)自体を見出しとして扱う
+    noHeader: true,
 
     render(container) {
       ensureView();
       const today = App.date.today();
 
-      // ---- 月ナビゲーション ----
-      const nav = App.el("div", { class: "cal-nav section" }, [
+      // ---- 月ナビゲーション(このページの見出しを兼ねる) ----
+      const nav = App.el("div", { class: "cal-nav" }, [
         App.el("button", {
           class: "icon-btn", "aria-label": "前の月",
           html: App.icon("back", 20),
@@ -218,9 +228,9 @@ App.screens = App.screens || {};
 
         const eventsWrap = App.el("div", { class: "cal-day__events" });
         if (dayEvents.length <= MAX_CHIPS) {
-          dayEvents.forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: e.title })));
+          dayEvents.forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) })));
         } else {
-          dayEvents.slice(0, MAX_CHIPS - 1).forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: e.title })));
+          dayEvents.slice(0, MAX_CHIPS - 1).forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) })));
           eventsWrap.appendChild(App.el("span", { class: "cal-day__more", text: `+${dayEvents.length - (MAX_CHIPS - 1)}件` }));
         }
 

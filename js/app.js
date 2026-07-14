@@ -30,6 +30,11 @@ window.App = window.App || {};
     header.innerHTML = "";
     const screen = App.screens[route];
 
+    // 画面自身が見出しを兼ねるコンテンツを持つ場合(カレンダーの月表示など)、
+    // 共通ヘッダーは表示しない。ただしセーフエリア分の余白は#app-headerの
+    // paddingとして残るので、ノッチにコンテンツが被ることはない
+    if (screen.noHeader) return;
+
     if (screen.greeting) {
       const g = App.greeting();
       const now = new Date();
@@ -122,11 +127,12 @@ window.App = window.App || {};
     lastRoute = route;
   }
 
-  // データ更新後の再描画(スクロール位置を保つ)
+  // データ更新後の再描画(スクロール位置を保つ。縦横とも)
   App.refresh = function () {
+    const x = window.scrollX;
     const y = window.scrollY;
     render();
-    window.scrollTo(0, y);
+    window.scrollTo(x, y);
   };
 
   // ---- 起動 ----

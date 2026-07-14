@@ -137,12 +137,14 @@
 
 /* ---- カレンダー ---- */
 .cal-nav {
+  /* 共通ヘッダーの代わりにこの月ナビ自体がページ見出しを兼ねる */
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 52px;
   margin-bottom: var(--spacing-3);
 }
-.cal-nav__label { font-size: var(--text-section); font-weight: 700; }
+.cal-nav__label { font-size: var(--text-page-title); font-weight: 700; }
 .cal-grid {
   display: grid;
   /* minmax(0, 1fr): 長い予定名でも列がその分だけ広がらないようにする(既定のfrはauto最小幅を持つため) */
@@ -216,8 +218,8 @@
   background: var(--cat-calendar-bg);
   color: var(--cat-calendar);
   white-space: nowrap;
+  /* 文字数はJS側で4文字に固定済み。「…」は付けず、はみ出しの保険としてoverflow:hiddenのみ */
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .cal-day__more {
   font-size: 10px;

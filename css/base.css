@@ -5,6 +5,8 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+html, body { overflow-x: hidden; }
+
 body {
   margin: 0;
   background: var(--color-background);
@@ -28,7 +30,9 @@ button {
 }
 input, textarea, select {
   font-family: inherit;
-  font-size: var(--text-body);
+  /* 16px未満だとiOS Safari/LINE内ブラウザがタップ時に自動ズームし、
+     再描画のたびに横スクロール位置がずれる原因になるため16px以上を維持 */
+  font-size: 16px;
   color: var(--color-text);
 }
 img { max-width: 100%; display: block; }
