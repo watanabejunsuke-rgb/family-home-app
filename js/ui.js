@@ -291,10 +291,12 @@ window.App = window.App || {};
     return li;
   };
 
-  // ---- パレット色(0=標準/カレンダーの既定色、1〜6=メンバー識別色と同じ北欧トーン) ----
+  // ---- パレット色(0=標準/カレンダーの既定色、1〜6=メンバー識別色と同じ北欧トーン、
+  //      7=応援チームカラー専用枠。member色と混ざらないよう別枠にしてある) ----
   // 予定の色分けなど、メンバーに紐付かない場面で使う汎用ヘルパー
   App.paletteColor = function (n) {
     if (!n) return { fg: "var(--cat-calendar)", bg: "var(--cat-calendar-bg)" };
+    if (n === 7) return { fg: "var(--team-kashiwa)", bg: "var(--team-kashiwa-bg)" };
     return { fg: `var(--member-${n})`, bg: `var(--member-${n}-bg)` };
   };
 

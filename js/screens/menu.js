@@ -67,7 +67,7 @@ App.screens = App.screens || {};
       if (!opponent) { opponentInput.focus(); App.toast("対戦相手を入力してください", "info"); return; }
       s.close();
       const title = `⚽ ${team} vs ${opponent}(${venue === "home" ? "ホーム" : "アウェイ"})`;
-      const color = isKashiwaTeam(team) ? 1 : 0;
+      const color = isKashiwaTeam(team) ? 7 : 0;
       App.store.update((st2) => {
         if (isEdit) {
           const e = st2.events.find((x) => x.id === match.id);
@@ -208,7 +208,7 @@ App.screens = App.screens || {};
               memo: f.memo,
               memberIds: st2.family.map((m) => m.id),
               kind: "match",
-              color: 1,
+              color: 7,
             });
           });
         });

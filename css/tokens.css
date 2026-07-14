@@ -38,6 +38,9 @@
   --cat-note: #8A7D91;         --cat-note-bg: #F0EDF2;
   --cat-ai: #71879B;           --cat-ai-bg: #EAF0F4;
 
+  /* --- 応援チームカラー(柏レイソル=マスタードイエロー。member色とは別枠) --- */
+  --team-kashiwa: #C9A227;     --team-kashiwa-bg: #F8EFD6;
+
   /* --- カレンダー:土曜/日曜・祝日の文字色(数字・曜日ヘッダーのみに使用) --- */
   --cal-sat: #66869A;
   --cal-sun: #B96862;

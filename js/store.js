@@ -79,11 +79,12 @@ window.App = window.App || {};
     };
   }
 
-  // 柏レイソルの試合カラー導入(v0.13.3)より前に登録された試合は色が付いていないため、
-  // 読み込み・同期のたびに補正する(新規作成分は最初から色付きなので影響なし)
+  // 柏レイソルの試合カラー導入(v0.13.3、専用色への変更はv0.13.5)より前に
+  // 登録された試合は色が付いていない/違う色のため、読み込み・同期のたびに補正する
+  // (新規作成分は最初から専用色7が付くので影響なし)
   App.migrateMatchColors = function (state) {
     (state.events || []).forEach((e) => {
-      if (e.kind === "match" && /柏レイソル/.test(e.title) && e.color !== 1) e.color = 1;
+      if (e.kind === "match" && /柏レイソル/.test(e.title) && e.color !== 7) e.color = 7;
     });
   };
 
