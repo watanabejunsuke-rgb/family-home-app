@@ -182,6 +182,10 @@ window.App = window.App || {};
   window.addEventListener("hashchange", render);
   document.addEventListener("DOMContentLoaded", () => {
     App.store.load();
-    App.initLiff(render);
+    App.initLiff(() => {
+      render();
+      // LIFF準備後に世帯データを取得(未設定・未参加なら何もしない)
+      if (App.sync && App.sync.init) App.sync.init();
+    });
   });
 })();

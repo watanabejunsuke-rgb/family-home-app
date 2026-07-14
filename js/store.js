@@ -99,6 +99,15 @@ window.App = window.App || {};
       } catch (e) {
         App.toast && App.toast("保存できませんでした。空き容量を確認してください。", "info");
       }
+      // 世帯共有が有効なら、変更をデバウンスしてサーバーへ(未設定なら何もしない)
+      if (App.sync && App.sync.afterSave) App.sync.afterSave();
+    },
+
+    // 同期を発火させずにローカルだけ保存(同期処理が syncedAt を書き戻すときに使う)
+    saveLocal() {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(this.state));
+      } catch (e) { /* 容量オーバー等は次回に委ねる */ }
     },
 
     // 変更→保存→再描画 を一括で行う

@@ -276,7 +276,7 @@ App.screens = App.screens || {};
       container.appendChild(App.el("section", { class: "section" }, [App.sectionHeader("きろく・そうだん"), linkCard]));
 
       // ---- 設定 ----
-      const settingsCard = App.el("div", { class: "card card--lg" }, [
+      const settingsRows = [
         App.el("button", { class: "list-row", onclick: () => App.go("notifSettings") }, [
           App.el("span", { class: "list-row__icon", style: "background: var(--color-primary-light); color: var(--color-primary);", html: App.icon("bell", 18) }),
           App.el("span", { class: "list-row__body" }, [
@@ -285,6 +285,22 @@ App.screens = App.screens || {};
           ]),
           App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
         ]),
+      ];
+      // 家族と共有(バックエンド接続後のみ表示)
+      if (App.sync && App.sync.configured()) {
+        settingsRows.push(
+          App.el("button", { class: "list-row", onclick: () => App.go("householdShare") }, [
+            App.el("span", { class: "list-row__icon", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("users", 18) }),
+            App.el("span", { class: "list-row__body" }, [
+              App.el("span", { text: "家族と共有" }),
+              App.el("span", { class: "list-row__sub", text: App.sync.hasHousehold() ? "連携中" : "別のスマホと同期する" }),
+            ]),
+            App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+          ])
+        );
+      }
+      const settingsCard = App.el("div", { class: "card card--lg" }, [
+        ...settingsRows,
         App.el("button", { class: "list-row", onclick: openTeamSheet }, [
           App.el("span", { class: "list-row__icon", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("heart", 18) }),
           App.el("span", { class: "list-row__body" }, [

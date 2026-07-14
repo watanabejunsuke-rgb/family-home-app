@@ -28,6 +28,8 @@ window.App = window.App || {};
         const profile = await window.liff.getProfile();
         App.liffState.mode = "liff";
         App.liffState.profile = profile;
+        // 世帯共有の本人確認に使うIDトークン(openidスコープが必要。無ければnull)
+        try { App.liffState.idToken = window.liff.getIDToken() || null; } catch (e) { App.liffState.idToken = null; }
         App.store.update((st) => {
           st.settings.userName = profile.displayName;
         });
