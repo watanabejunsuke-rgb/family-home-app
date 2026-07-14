@@ -24,6 +24,26 @@ App.screens = App.screens || {};
     content.push(App.field(isDiary ? "今日のできごと" : "内容", bodyInput));
     content.push(saveBtn);
 
+    // メモは「やること」に近い内容になることがあるので、ワンタップで移せる導線を置く
+    if (isEdit && !isDiary) {
+      const convert = App.el("button", {
+        class: "btn-secondary",
+        style: "margin-top: var(--spacing-3);",
+        html: App.icon("checkCircle", 16) + "<span>このメモをやることにする</span>",
+      });
+      convert.addEventListener("click", () => {
+        const title = (titleInput.value.trim() || bodyInput.value.trim().split("\n")[0] || "").slice(0, 60);
+        if (!title) { App.toast("内容を入力してください", "info"); return; }
+        s.close();
+        App.store.update((st) => {
+          st.tasks.push({ id: App.uid(), title, due: note.date || App.date.today(), done: false, createdAt: Date.now() });
+          st.notes = st.notes.filter((n) => n.id !== note.id);
+        });
+        App.toast("やることに移しました", "checkCircle");
+      });
+      content.push(convert);
+    }
+
     if (isEdit) {
       const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>削除する</span>" });
       del.addEventListener("click", () => {
@@ -111,21 +131,40 @@ App.screens = App.screens || {};
               : App.emptyState("heart", "日記はまだありません", "一行だけでも、あとで宝物になります。"),
           ])
         );
+      } else if (tab === "memo") {
+        // メモ:タイトル主役の付箋ボード(北欧トーンの色を並び順で循環)
+        const board = App.el("div", { class: "note-board" });
+        notes.forEach((n, i) => {
+          const c = App.paletteColor((i % 6) + 1);
+          board.appendChild(
+            App.el("button", {
+              class: "note-sticky",
+              style: `background: ${c.bg};`,
+              "aria-label": `${n.title || "メモ"}を開く`,
+              onclick: () => openNoteSheet(n),
+            }, [
+              n.title ? App.el("p", { class: "note-sticky__title", style: `color: ${c.fg};`, text: n.title }) : null,
+              App.el("p", { class: "note-sticky__body", text: n.body }),
+            ])
+          );
+        });
+        section.appendChild(board);
+      } else {
+        // 日記:日付主役のタイムライン
+        notes.forEach((n) => {
+          section.appendChild(
+            App.el("button", {
+              class: "card card--lg card--tappable note-card",
+              style: "width: 100%; text-align: left; display: block;",
+              "aria-label": `${App.fmtDate(n.date)}の日記を開く`,
+              onclick: () => openNoteSheet(n),
+            }, [
+              App.el("p", { class: "note-card__date", text: App.fmtDate(n.date) }),
+              App.el("p", { class: "note-card__body", text: n.body }),
+            ])
+          );
+        });
       }
-      notes.forEach((n) => {
-        section.appendChild(
-          App.el("button", {
-            class: "card card--lg card--tappable note-card",
-            style: "width: 100%; text-align: left; display: block;",
-            "aria-label": `${n.title || "日記"}を開く`,
-            onclick: () => openNoteSheet(n),
-          }, [
-            App.el("p", { class: "note-card__date", text: App.fmtDate(n.date) }),
-            n.title ? App.el("p", { class: "note-card__title", text: n.title }) : null,
-            App.el("p", { class: "note-card__body", text: n.body }),
-          ])
-        );
-      });
       container.appendChild(section);
 
       container.appendChild(App.fab(tab === "memo" ? "メモを追加" : "日記を書く", () => openNoteSheet(null)));

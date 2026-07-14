@@ -44,7 +44,7 @@ window.App = window.App || {};
         { id: App.uid(), title: "保育園の連絡帳を書く", due: today(), done: false, createdAt: Date.now() },
         { id: App.uid(), title: "オムツを注文する", due: today(), done: false, createdAt: Date.now() },
         { id: App.uid(), title: "水筒を洗う", due: today(), done: true, createdAt: Date.now() },
-        { id: App.uid(), title: "写真をプリントする", due: null, done: false, createdAt: Date.now() },
+        { id: App.uid(), title: "写真をプリントする", due: daysAhead(4), done: false, createdAt: Date.now() },
         { id: App.uid(), title: "実家に電話する", due: null, done: false, createdAt: Date.now() },
       ],
       shopping: [

@@ -365,6 +365,47 @@
   overflow: hidden;
 }
 
+/* ---- メモ:付箋ボード(タイトル主役・日付は控えめ) ---- */
+.note-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-3);
+}
+.note-sticky {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-3);
+  min-height: 96px;
+  transition: transform var(--t-fast);
+}
+.note-sticky:active { transform: scale(0.98); }
+.note-sticky__title {
+  font-size: var(--text-sub);
+  font-weight: 600;
+  margin-bottom: var(--spacing-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-sticky__body {
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-sticky__date {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-2);
+}
+
 /* ---- AI相談 ---- */
 .ai-screen { display: flex; flex-direction: column; min-height: 100%; }
 .ai-notice {

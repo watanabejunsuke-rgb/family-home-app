@@ -142,6 +142,26 @@ App.screens.home = {
       });
       taskCard.appendChild(ul);
     }
+    // 買い物リストは「今日やること」の中の箱として置く(品目はホームを埋めない)
+    const shoppingOpen = st.shopping.filter((s) => !s.done);
+    const shoppingSub = shoppingOpen.length
+      ? `${shoppingOpen.slice(0, 2).map((s) => s.name).join("、")}${shoppingOpen.length > 2 ? " ほか" : ""} 残り${shoppingOpen.length}件`
+      : "リストは空です";
+    taskCard.appendChild(
+      App.el("button", {
+        class: "list-row",
+        style: "border-top: 1px solid var(--color-divider); margin-top: var(--spacing-1);",
+        "aria-label": `買い物リストを開く(${shoppingSub})`,
+        onclick: () => App.go("shopping"),
+      }, [
+        App.el("span", { class: "list-row__icon", style: "background: var(--cat-shopping-bg); color: var(--cat-shopping);", html: App.icon("cart", 18) }),
+        App.el("span", { class: "list-row__body" }, [
+          App.el("span", { text: "買い物リスト" }),
+          App.el("span", { class: "list-row__sub", text: shoppingSub }),
+        ]),
+        App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+      ])
+    );
     taskCard.appendChild(
       App.el("button", {
         class: "section-header__action",
@@ -154,10 +174,9 @@ App.screens.home = {
     container.appendChild(tasksSection);
 
     // ---- 4. クイックアクセス ----
-    const shoppingLeft = App.data.shoppingRemaining();
+    // 買い物リストは「今日やること」内の箱に移したので、ここでは重複させない
     const plantsDue = App.data.plantsDue();
     const quick = [
-      { label: "買い物リスト", sub: shoppingLeft ? `残り${shoppingLeft}件` : "リストは空です", icon: "cart", cat: "shopping", route: "shopping" },
       { label: "植物の記録", sub: plantsDue ? `水やり ${plantsDue}鉢` : "みんな元気です", icon: "leaf", cat: "plant", route: "plants" },
       { label: "メモ・日記", sub: "残しておきたいこと", icon: "note", cat: "note", route: "notes" },
       { label: "AIに相談", sub: "気軽にどうぞ", icon: "sparkle", cat: "ai", route: "ai" },
