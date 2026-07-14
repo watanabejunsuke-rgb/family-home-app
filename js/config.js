@@ -5,9 +5,9 @@
 // ============================================
 window.APP_CONFIG = {
   APP_NAME: "わが家ホーム",
-  VERSION: "0.13.0",
+  VERSION: "0.13.1",
   LIFF_ID: "2010693415-ddc2Kd3X",
   // 世帯共有バックエンド(GAS)のウェブアプリURL。空のあいだは同期は完全に無効(端末内のみ)。
-  // backend/README.md の手順でデプロイして得た /exec URL をここに設定する。
-  SYNC_URL: "",
+  // ※共有用の正しい形は /u/N/ を含まない .../macros/s/.../exec
+  SYNC_URL: "https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWgMskkeVP6ELOI6ADsN-uN1RzBYg/exec",
 };
