@@ -113,6 +113,8 @@ window.App = window.App || {};
     // 変更→保存→再描画 を一括で行う
     update(mutator) {
       mutator(this.state);
+      // 自分で何か操作した時点で「サンプルデータ」ではなくなる
+      if (this.state.isMockData) this.state.isMockData = false;
       this.save();
       if (App.refresh) App.refresh();
     },

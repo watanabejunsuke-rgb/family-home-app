@@ -5,6 +5,10 @@ window.App = window.App || {};
 App.screens = App.screens || {};
 
 (function () {
+  // 柏レイソルの試合はチームカラー(黄色系)で表示する。member色1が北欧トーンの
+  // アンバー系で近いため流用(カレンダーの色スウォッチと同じパレット)
+  const isKashiwaTeam = (name) => (name || "").includes("柏レイソル");
+
   function openNameSheet() {
     const st = App.store.state;
     const nameInput = App.el("input", { type: "text", value: st.settings.userName, placeholder: "例:パパ" });
@@ -63,13 +67,14 @@ App.screens = App.screens || {};
       if (!opponent) { opponentInput.focus(); App.toast("対戦相手を入力してください", "info"); return; }
       s.close();
       const title = `⚽ ${team} vs ${opponent}(${venue === "home" ? "ホーム" : "アウェイ"})`;
+      const color = isKashiwaTeam(team) ? 1 : 0;
       App.store.update((st2) => {
         if (isEdit) {
           const e = st2.events.find((x) => x.id === match.id);
-          if (e) Object.assign(e, { title, date: dateInput.value, time, opponent, venue, kind: "match" });
+          if (e) Object.assign(e, { title, date: dateInput.value, time, opponent, venue, kind: "match", color });
         } else {
           st2.events.push({
-            id: App.uid(), title, date: dateInput.value, time, opponent, venue,
+            id: App.uid(), title, date: dateInput.value, time, opponent, venue, color,
             memberIds: st2.family.map((m) => m.id), kind: "match",
           });
         }
@@ -119,7 +124,6 @@ App.screens = App.screens || {};
       style: "margin-top: var(--spacing-3);",
       html: App.icon("plus", 18) + "<span>試合を追加(実際の日程)</span>",
     });
-    const isKashiwaTeam = (name) => (name || "").includes("柏レイソル");
     const importBtn = App.el("button", {
       class: "section-header__action",
       style: "margin-top: var(--spacing-3);",
@@ -204,6 +208,7 @@ App.screens = App.screens || {};
               memo: f.memo,
               memberIds: st2.family.map((m) => m.id),
               kind: "match",
+              color: 1,
             });
           });
         });
