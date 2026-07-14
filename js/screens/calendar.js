@@ -211,7 +211,7 @@ App.screens = App.screens || {};
       const start = new Date(first);
       start.setDate(1 - offsetToMonday);
 
-      const MAX_CHIPS = 2;
+      const MAX_CHIPS = 3;
       for (let i = 0; i < totalCells; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
@@ -226,13 +226,12 @@ App.screens = App.screens || {};
         else if (dow === 6) weekendClass = " cal-day--sat";
         else if (holidayName) weekendClass = " cal-day--holiday";
 
+        // 最大3件まで表示。それ以上は「+n件」を出さず切り捨てる
+        // (全件は下の「選択日の予定」パネルで確認できるため)
         const eventsWrap = App.el("div", { class: "cal-day__events" });
-        if (dayEvents.length <= MAX_CHIPS) {
-          dayEvents.forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) })));
-        } else {
-          dayEvents.slice(0, MAX_CHIPS - 1).forEach((e) => eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) })));
-          eventsWrap.appendChild(App.el("span", { class: "cal-day__more", text: `+${dayEvents.length - (MAX_CHIPS - 1)}件` }));
-        }
+        dayEvents.slice(0, MAX_CHIPS).forEach((e) =>
+          eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) }))
+        );
 
         const cell = App.el("button", {
           class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
@@ -249,11 +248,11 @@ App.screens = App.screens || {};
 
       // ---- 選択日の予定(常時表示。Yahoo!カレンダーのように上下を同時に見せる) ----
       const selectedHoliday = App.holidayName(view.selected);
-      const daySection = App.el("section", { class: "section" }, [
+      const daySection = App.el("section", { class: "section cal-day-section" }, [
         App.sectionHeader(`${App.fmtDate(view.selected)}${selectedHoliday ? "・" + selectedHoliday : ""}の予定`, { icon: "calendar" }),
       ]);
       const selectedEvents = App.data.eventsOn(view.selected);
-      const dayCard = App.el("div", { class: "card card--lg" });
+      const dayCard = App.el("div", { class: "card card--lg cal-day-card" });
       if (selectedEvents.length === 0) {
         dayCard.appendChild(
           App.emptyState("sun", "この日の予定はありません", "右下の+から追加できます。")

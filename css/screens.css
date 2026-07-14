@@ -163,7 +163,7 @@
 .cal-grid__wd--sat { color: var(--cal-sat); }
 .cal-grid__wd--sun { color: var(--cal-sun); }
 .cal-day {
-  min-height: 52px;
+  min-height: 72px; /* 予定チップ最大3件+日付が収まる高さ */
   min-width: 0; /* グリッド項目の既定min-width:autoを解除し、列幅を守る */
   overflow: hidden;
   display: flex;
@@ -221,12 +221,10 @@
   /* 文字数はJS側で4文字に固定済み。「…」は付けず、はみ出しの保険としてoverflow:hiddenのみ */
   overflow: hidden;
 }
-.cal-day__more {
-  font-size: 10px;
-  line-height: 1.3;
-  padding: 1px 2px;
-  color: var(--color-text-muted);
-}
+
+/* ---- 選択日の予定パネル(カレンダー下に常時表示。上下の余白を詰めてコンパクトに) ---- */
+.cal-day-section { margin-top: var(--spacing-4); }
+.cal-day-card { padding-top: var(--spacing-3); padding-bottom: var(--spacing-3); }
 
 /* ---- セグメント切替(タスク/メモ) ---- */
 .segment {
