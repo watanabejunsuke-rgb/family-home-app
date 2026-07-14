@@ -5,9 +5,16 @@ window.App = window.App || {};
 App.screens = App.screens || {};
 
 (function () {
-  // マス内の予定名は「…」で削ると実質2〜3文字しか見えなくなるため、
-  // 絵文字(サロゲートペア)も壊さずに固定文字数で切り落とす
+  // マス内の予定名は「…」で削ると実質2〜3文字しか見えなくなるため、固定文字数で切り落とす。
+  // 単純なスプレッド([...text])はコードポイント単位の分割で、性別記号付きの絵文字
+  // (👨‍🏊‍♀️ 等、内部は複数コードポイントの結合)を複数文字として数えてしまい、
+  // 絵文字だけで4文字分を使い切って後ろの文字が消える不具合になる。
+  // Intl.Segmenterで「人が見て1文字に見える単位(書記素)」ごとに数える。
   function clipChars(text, n) {
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      const graphemes = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map((s) => s.segment);
+      return graphemes.length > n ? graphemes.slice(0, n).join("") : text;
+    }
     const chars = [...text];
     return chars.length > n ? chars.slice(0, n).join("") : text;
   }
