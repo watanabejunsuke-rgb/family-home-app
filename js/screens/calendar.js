@@ -148,6 +148,57 @@ App.screens = App.screens || {};
     });
   }
 
+  // その日の予定一覧をシートで表示する(月上旬など画面下までスクロールしないと
+  // 見えなかった「選択日の予定」の代わり)。予定タップで編集シートへ。
+  function openDaySheet(dateStr) {
+    const holiday = App.holidayName(dateStr);
+    const events = App.data.eventsOn(dateStr);
+
+    const addBtn = App.el("button", {
+      class: "btn-primary",
+      style: "margin-top: var(--spacing-4);",
+      html: App.icon("plus", 18) + "<span>この日に予定を追加</span>",
+    });
+    addBtn.addEventListener("click", () => {
+      s.close();
+      openEventSheet(null);
+    });
+
+    const content = [];
+    if (events.length === 0) {
+      content.push(
+        App.el("div", { class: "card card--lg" }, [
+          App.emptyState("sun", "この日の予定はありません", "下のボタンから追加できます。"),
+        ])
+      );
+    } else {
+      const card = App.el("div", { class: "card card--lg" });
+      events.forEach((ev) => {
+        const avatars = App.memberBadges(ev);
+        const titleWrap = App.el("div", { class: "schedule-item__title" }, [
+          ev.title,
+          ev.memo ? App.el("span", { class: "schedule-item__memo", text: ev.memo }) : null,
+        ]);
+        card.appendChild(
+          App.el("button", {
+            class: "schedule-item",
+            style: "width:100%; text-align:left;",
+            "aria-label": `${ev.title}を編集${ev.memo ? "(メモあり)" : ""}`,
+            onclick: () => { s.close(); openEventSheet(ev); },
+          }, [
+            App.el("span", { class: "schedule-item__time", text: ev.time || "終日" }),
+            titleWrap,
+            avatars,
+          ])
+        );
+      });
+      content.push(card);
+    }
+    content.push(addBtn);
+
+    const s = App.sheet(`${App.fmtDate(dateStr)}${holiday ? "・" + holiday : ""}`, content);
+  }
+
   App.screens.calendar = {
     title: "カレンダー",
     nav: "calendar",
@@ -228,7 +279,7 @@ App.screens = App.screens || {};
           class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
           "aria-pressed": String(ds === view.selected),
           "aria-label": `${d.getMonth() + 1}月${d.getDate()}日${holidayName ? "・" + holidayName : ""}${dayEvents.length ? "(予定あり)" : ""}`,
-          onclick: () => { view.selected = ds; App.refresh(); },
+          onclick: () => { view.selected = ds; App.refresh(); openDaySheet(ds); },
         }, [
           App.el("span", { class: "cal-day__date", text: String(d.getDate()) }),
           eventsWrap,
@@ -236,40 +287,6 @@ App.screens = App.screens || {};
         grid.appendChild(cell);
       }
       container.appendChild(grid);
-
-      // ---- 選択日の予定 ----
-      const selectedHoliday = App.holidayName(view.selected);
-      const daySection = App.el("section", { class: "section" }, [
-        App.sectionHeader(`${App.fmtDate(view.selected)}${selectedHoliday ? "・" + selectedHoliday : ""}の予定`, { icon: "calendar" }),
-      ]);
-      const events = App.data.eventsOn(view.selected);
-      const card = App.el("div", { class: "card card--lg" });
-      if (events.length === 0) {
-        card.appendChild(
-          App.emptyState("sun", "この日の予定はありません", "右下の+から追加できます。")
-        );
-      } else {
-        events.forEach((ev) => {
-          const avatars = App.memberBadges(ev);
-          const titleWrap = App.el("div", { class: "schedule-item__title" }, [
-            ev.title,
-            ev.memo ? App.el("span", { class: "schedule-item__memo", text: ev.memo }) : null,
-          ]);
-          const rowEl = App.el("button", {
-            class: "schedule-item",
-            style: "width:100%; text-align:left;",
-            "aria-label": `${ev.title}を編集${ev.memo ? "(メモあり)" : ""}`,
-            onclick: () => openEventSheet(ev),
-          }, [
-            App.el("span", { class: "schedule-item__time", text: ev.time || "終日" }),
-            titleWrap,
-            avatars,
-          ]);
-          card.appendChild(rowEl);
-        });
-      }
-      daySection.appendChild(card);
-      container.appendChild(daySection);
 
       container.appendChild(App.fab("予定を追加", () => openEventSheet(null)));
     },

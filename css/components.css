@@ -362,6 +362,8 @@
 @keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
 
 .sheet {
+  /* シート自体はキーボードを出さないための便宜上のフォーカス先なので、枠線は出さない */
+  outline: none;
   width: 100%;
   max-width: var(--app-max-width);
   max-height: 85dvh;

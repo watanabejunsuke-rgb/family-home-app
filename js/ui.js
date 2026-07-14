@@ -82,7 +82,7 @@ window.App = window.App || {};
   // ---- Bottom Sheet ----
   App.sheet = function (title, contentNodes) {
     const root = document.getElementById("overlay-root");
-    const sheet = App.el("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title }, [
+    const sheet = App.el("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" }, [
       App.el("div", { class: "sheet__grip" }),
       App.el("h2", { class: "sheet__title", text: title }),
       ...[].concat(contentNodes),
@@ -102,8 +102,10 @@ window.App = window.App || {};
       }
     });
     root.appendChild(overlay);
-    const first = sheet.querySelector("input, textarea, button");
-    if (first) first.focus();
+    // 入力欄に自動フォーカスするとiPhoneでキーボードが即開き、
+    // シート先頭(タイトル)が見えないまま入力欄へ強制スクロールされてしまうため、
+    // フォーカスはシート自体に留める(キーボードは出さない)
+    sheet.focus();
     return { close, node: sheet };
   };
 
