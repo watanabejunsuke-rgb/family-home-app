@@ -6,13 +6,16 @@ App.screens = App.screens || {};
 
 (function () {
   // タスク追加・編集シート(ホームからも呼ばれる共通部品)
-  App.openTaskSheet = function (task) {
+  // opts.prefillTitle : 新規作成時の初期タイトル(メモからの変換など)
+  // opts.onCreate(st) : 新規作成の保存時、同じ更新内で追加で行う処理(メモ削除など)
+  // opts.successToast : 保存成功時のトースト文言の上書き
+  App.openTaskSheet = function (task, opts = {}) {
     const isEdit = !!task;
     const today = App.date.today();
     // due: null=いつでも / 今日と同じ=今日 / それ以外=日付を指定
     let mode = isEdit ? (task.due ? (task.due === today ? "today" : "date") : "none") : "today";
 
-    const titleInput = App.el("input", { type: "text", value: isEdit ? task.title : "", placeholder: "例:保育園の連絡帳を書く" });
+    const titleInput = App.el("input", { type: "text", value: isEdit ? task.title : (opts.prefillTitle || ""), placeholder: "例:保育園の連絡帳を書く" });
     const dateInput = App.el("input", { type: "date", value: isEdit && task.due ? task.due : today });
     const dateField = App.field("日付", dateInput);
     dateField.style.display = mode === "date" ? "" : "none";
@@ -76,9 +79,10 @@ App.screens = App.screens || {};
           if (t) Object.assign(t, { title, due });
         } else {
           st.tasks.push({ id: App.uid(), title, due, done: false, createdAt: Date.now() });
+          if (opts.onCreate) opts.onCreate(st);
         }
       });
-      App.toast(isEdit ? "変更しました" : "やることを追加しました");
+      App.toast(opts.successToast || (isEdit ? "変更しました" : "やることを追加しました"));
     });
   };
 

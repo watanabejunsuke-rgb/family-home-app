@@ -35,11 +35,13 @@ App.screens = App.screens || {};
         const title = (titleInput.value.trim() || bodyInput.value.trim().split("\n")[0] || "").slice(0, 60);
         if (!title) { App.toast("内容を入力してください", "info"); return; }
         s.close();
-        App.store.update((st) => {
-          st.tasks.push({ id: App.uid(), title, due: note.date || App.date.today(), done: false, createdAt: Date.now() });
-          st.notes = st.notes.filter((n) => n.id !== note.id);
+        // やること追加シートを開いて日付(今日/日付を指定/いつでも)を選んでもらう。
+        // 保存されたときだけ元メモを削除する(キャンセルすればメモは残る)
+        App.openTaskSheet(null, {
+          prefillTitle: title,
+          onCreate: (st) => { st.notes = st.notes.filter((n) => n.id !== note.id); },
+          successToast: "やることに移しました",
         });
-        App.toast("やることに移しました", "checkCircle");
       });
       content.push(convert);
     }
