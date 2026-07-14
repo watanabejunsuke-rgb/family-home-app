@@ -74,6 +74,64 @@ App.screens = App.screens || {};
     ]);
   }
 
+  // くり返し予定は「ルールを都度計算」ではなく「先の分まで実体の予定を一括作成」方式。
+  // できた予定は普通の予定と同じ形なので、既存の表示・編集がそのまま使える。
+  // 同じくり返しの回はseriesIdで束ねる(削除時に「この日だけ/すべて」を選べるように)。
+  const WD_FULL = ["日", "月", "火", "水", "木", "金", "土"];
+
+  function recurDates(startStr, mode, untilStr) {
+    const start = new Date(startStr + "T00:00:00");
+    const until = new Date(untilStr + "T00:00:00");
+    const dates = [];
+    if (mode === "weekly") {
+      for (let d = new Date(start); d <= until; d.setDate(d.getDate() + 7)) {
+        dates.push(App.date.str(d));
+      }
+    } else if (mode === "monthly") {
+      const day = start.getDate();
+      const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+      while (cursor <= until) {
+        const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+        // 毎月31日など、存在しない月はその月だけスキップする
+        if (day <= daysInMonth) {
+          const candidate = new Date(cursor.getFullYear(), cursor.getMonth(), day);
+          if (candidate >= start && candidate <= until) dates.push(App.date.str(candidate));
+        }
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+    }
+    return dates;
+  }
+
+  // くり返し予定の削除範囲を選ばせる(この日だけ/すべて)
+  function confirmDeleteSeries(ev, closeEditSheet) {
+    const thisOnlyBtn = App.el("button", { class: "btn-danger-text", text: "この日だけ削除" });
+    const allBtn = App.el("button", { class: "btn-danger-text", style: "margin-top: var(--spacing-2);", text: "くり返しをすべて削除" });
+    const cancelBtn = App.el("button", { class: "btn-secondary", text: "キャンセル", style: "margin-top: var(--spacing-3);" });
+    const s2 = App.sheet("削除する範囲を選んでください", [
+      App.el("p", {
+        text: `「${ev.title}」はくり返し予定です。`,
+        style: "color: var(--color-text-secondary); font-size: var(--text-sub); margin-bottom: var(--spacing-4);",
+      }),
+      thisOnlyBtn,
+      allBtn,
+      cancelBtn,
+    ]);
+    thisOnlyBtn.addEventListener("click", () => {
+      s2.close();
+      closeEditSheet();
+      App.store.update((st) => { st.events = st.events.filter((e) => e.id !== ev.id); });
+      App.toast("この日の予定を削除しました", "trash");
+    });
+    allBtn.addEventListener("click", () => {
+      s2.close();
+      closeEditSheet();
+      App.store.update((st) => { st.events = st.events.filter((e) => e.seriesId !== ev.seriesId); });
+      App.toast("くり返しの予定をすべて削除しました", "trash");
+    });
+    cancelBtn.addEventListener("click", s2.close);
+  }
+
   // ホームの予定詳細シートからも編集できるように公開する(App.openTaskSheetと同じパターン)
   App.openEventSheet = openEventSheet;
 
@@ -88,6 +146,12 @@ App.screens = App.screens || {};
     let time = data.time;
     const timeField = App.timeField("時間", time, (v) => (time = v));
     const memberChips = memberSelector(data);
+
+    let color = data.color || 0;
+    const colorField = App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: "予定の色" }),
+      App.colorSwatches(color, (v) => (color = v), { includeStandard: true }),
+    ]);
 
     // メモは毎回必要なわけではないので、既に内容がある時だけ最初から開き、
     // 無ければ「メモを追加」を押した時だけ出す(常時表示にして画面を圧迫しない)
@@ -115,13 +179,69 @@ App.screens = App.screens || {};
         App.el("span", { class: "field__label", text: "だれの予定?" }),
         memberChips,
       ]),
+      colorField,
       memoToggle,
       memoField,
-      saveBtn,
     ];
+
+    // くり返しは新規追加のときだけ選べる(編集は常にその回だけへの変更として扱う)
+    let recur = "none";
+    let recurUntilInput = null;
+    if (!isEdit) {
+      const defaultUntil = () => {
+        const d = new Date(dateInput.value + "T00:00:00");
+        d.setFullYear(d.getFullYear() + 1);
+        return App.date.str(d);
+      };
+      recurUntilInput = App.el("input", { type: "date", value: defaultUntil() });
+      const recurUntilField = App.field("いつまで", recurUntilInput);
+      recurUntilField.style.display = "none";
+
+      const recurLabel = (mode) => {
+        const d = new Date(dateInput.value + "T00:00:00");
+        if (mode === "weekly") return `毎週${WD_FULL[d.getDay()]}曜日`;
+        if (mode === "monthly") return `毎月${d.getDate()}日`;
+        return "しない";
+      };
+      const recurChips = App.chipSelect(
+        [
+          { value: "none", label: "しない" },
+          { value: "weekly", label: recurLabel("weekly") },
+          { value: "monthly", label: recurLabel("monthly") },
+        ],
+        recur,
+        (v) => {
+          recur = v;
+          recurUntilField.style.display = v === "none" ? "none" : "";
+        }
+      );
+      // 日付を変えたら「毎週◯曜日」「毎月◯日」の表示も追従させる
+      dateInput.addEventListener("change", () => {
+        const chipEls = recurChips.querySelectorAll(".chip");
+        chipEls[1].textContent = recurLabel("weekly");
+        chipEls[2].textContent = recurLabel("monthly");
+        if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil();
+      });
+      recurUntilInput.addEventListener("input", () => { recurUntilInput.dataset.touched = "1"; });
+
+      content.push(
+        App.el("div", { class: "field" }, [
+          App.el("span", { class: "field__label", text: "くり返し" }),
+          recurChips,
+        ]),
+        recurUntilField,
+      );
+    }
+
+    content.push(saveBtn);
+
     if (isEdit) {
       const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この予定を削除</span>" });
       del.addEventListener("click", () => {
+        if (ev.seriesId) {
+          confirmDeleteSeries(ev, s.close);
+          return;
+        }
         App.confirm({
           title: "予定を削除しますか?",
           message: `「${ev.title}」を削除します。この操作は取り消せません。`,
@@ -147,14 +267,23 @@ App.screens = App.screens || {};
         App.toast("予定の名前を入力してください", "info");
         return;
       }
+      if (!isEdit && recur !== "none" && recurUntilInput.value < dateInput.value) {
+        App.toast("「いつまで」は開始日より後にしてください", "info");
+        return;
+      }
       s.close();
+      const memo = memoInput.value.trim();
       App.store.update((st) => {
-        const memo = memoInput.value.trim();
         if (isEdit) {
           const e = st.events.find((x) => x.id === ev.id);
-          if (e) Object.assign(e, { title, date: dateInput.value, time, memberIds: data.memberIds, memo });
+          if (e) Object.assign(e, { title, date: dateInput.value, time, memberIds: data.memberIds, memo, color });
+        } else if (recur === "none") {
+          st.events.push({ id: App.uid(), title, date: dateInput.value, time, memberIds: data.memberIds, memo, color });
         } else {
-          st.events.push({ id: App.uid(), title, date: dateInput.value, time, memberIds: data.memberIds, memo });
+          const seriesId = `series-${App.uid()}`;
+          recurDates(dateInput.value, recur, recurUntilInput.value).forEach((d) => {
+            st.events.push({ id: App.uid(), title, date: d, time, memberIds: data.memberIds, memo, color, seriesId });
+          });
         }
       });
       view.selected = dateInput.value;
@@ -236,9 +365,16 @@ App.screens = App.screens || {};
         // 最大3件まで表示。それ以上は「+n件」を出さず切り捨てる
         // (全件は下の「選択日の予定」パネルで確認できるため)
         const eventsWrap = App.el("div", { class: "cal-day__events" });
-        dayEvents.slice(0, MAX_CHIPS).forEach((e) =>
-          eventsWrap.appendChild(App.el("span", { class: "cal-day__chip", text: clipChars(e.title, 4) }))
-        );
+        dayEvents.slice(0, MAX_CHIPS).forEach((e) => {
+          const c = App.paletteColor(e.color || 0);
+          eventsWrap.appendChild(
+            App.el("span", {
+              class: "cal-day__chip",
+              style: `background: ${c.bg}; color: ${c.fg};`,
+              text: clipChars(e.title, 4),
+            })
+          );
+        });
 
         const cell = App.el("button", {
           class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
@@ -271,6 +407,7 @@ App.screens = App.screens || {};
             ev.title,
             ev.memo ? App.el("span", { class: "schedule-item__memo", text: ev.memo }) : null,
           ]);
+          const dot = App.el("span", { class: "schedule-item__dot", style: `color: ${App.paletteColor(ev.color || 0).fg};` });
           dayCard.appendChild(
             App.el("button", {
               class: "schedule-item",
@@ -278,6 +415,7 @@ App.screens = App.screens || {};
               "aria-label": `${ev.title}を編集${ev.memo ? "(メモあり)" : ""}`,
               onclick: () => openEventSheet(ev),
             }, [
+              dot,
               App.el("span", { class: "schedule-item__time", text: ev.time || "終日" }),
               titleWrap,
               avatars,

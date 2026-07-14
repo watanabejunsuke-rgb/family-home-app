@@ -56,6 +56,13 @@
   min-width: 44px;
   font-variant-numeric: tabular-nums;
 }
+.schedule-item__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  background: currentColor;
+}
 .schedule-item__title { flex: 1; font-weight: 500; min-width: 0; }
 .schedule-item__note-icon {
   color: var(--color-text-muted);

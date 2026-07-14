@@ -64,6 +64,7 @@ App.screens.home = {
           ev.title,
           ev.memo ? App.el("span", { class: "schedule-item__note-icon", html: App.icon("note", 13) }) : null,
         ]);
+        const dot = App.el("span", { class: "schedule-item__dot", style: `color: ${App.paletteColor(ev.color || 0).fg};` });
         scheduleCard.appendChild(
           App.el("button", {
             class: "schedule-item",
@@ -71,6 +72,7 @@ App.screens.home = {
             "aria-label": `「${ev.title}」の詳しい内容を見る`,
             onclick: () => openEventDetailSheet(ev),
           }, [
+            dot,
             App.el("span", { class: "schedule-item__time", text: ev.time || "終日" }),
             title,
             App.memberBadges(ev),

@@ -15,27 +15,6 @@ App.screens = App.screens || {};
     return `${Math.floor(h / 24)}日前`;
   }
 
-  // 色スウォッチ(1〜6)。選択中は縁取りで示す
-  function colorSwatches(selected, onChange) {
-    const row = App.el("div", { class: "color-swatch-row", role: "group", "aria-label": "メンバーの色" });
-    for (let n = 1; n <= 6; n++) {
-      const b = App.el("button", {
-        type: "button",
-        class: "color-swatch",
-        style: `background: var(--member-${n}-bg); color: var(--member-${n});`,
-        "aria-label": `色${n}`,
-        "aria-pressed": String(n === selected),
-        html: `<span class="color-swatch__dot"></span>`,
-      });
-      b.addEventListener("click", () => {
-        onChange(n);
-        row.querySelectorAll(".color-swatch").forEach((c, i) => c.setAttribute("aria-pressed", String(i + 1 === n)));
-      });
-      row.appendChild(b);
-    }
-    return row;
-  }
-
   // アイコンは名前の頭文字から自動で決まるため、絵文字ピッカーは廃止(v0.5.1)
   function openMemberSheet(member) {
     const isEdit = !!member;
@@ -65,7 +44,7 @@ App.screens = App.screens || {};
       App.field("なまえ", nameInput),
       App.el("div", { class: "field" }, [
         App.el("span", { class: "field__label", text: "この人の色" }),
-        colorSwatches(color, (v) => { color = v; syncHint(); }),
+        App.colorSwatches(color, (v) => { color = v; syncHint(); }),
         colorHint,
       ]),
       saveBtn,

@@ -291,6 +291,36 @@ window.App = window.App || {};
     return li;
   };
 
+  // ---- パレット色(0=標準/カレンダーの既定色、1〜6=メンバー識別色と同じ北欧トーン) ----
+  // 予定の色分けなど、メンバーに紐付かない場面で使う汎用ヘルパー
+  App.paletteColor = function (n) {
+    if (!n) return { fg: "var(--cat-calendar)", bg: "var(--cat-calendar-bg)" };
+    return { fg: `var(--member-${n})`, bg: `var(--member-${n}-bg)` };
+  };
+
+  // 丸い色スウォッチの行。includeStandard:true で「標準」(0)を先頭に含める
+  App.colorSwatches = function (selected, onChange, { includeStandard = false } = {}) {
+    const options = includeStandard ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6];
+    const row = App.el("div", { class: "color-swatch-row", role: "group", "aria-label": "色" });
+    options.forEach((n) => {
+      const c = App.paletteColor(n);
+      const b = App.el("button", {
+        type: "button",
+        class: "color-swatch",
+        style: `background: ${c.bg}; color: ${c.fg};`,
+        "aria-label": n === 0 ? "標準の色" : `色${n}`,
+        "aria-pressed": String(n === selected),
+        html: `<span class="color-swatch__dot"></span>`,
+      });
+      b.addEventListener("click", () => {
+        onChange(n);
+        row.querySelectorAll(".color-swatch").forEach((el, i) => el.setAttribute("aria-pressed", String(options[i] === n)));
+      });
+      row.appendChild(b);
+    });
+    return row;
+  };
+
   // ---- 予定のメンバー表示(全員なら「みんな」バッジ、一部なら頭文字バッジ) ----
   // 絵文字アバターは小さいと色味が似て判別しづらいため、名前の頭文字+メンバー別の色で表す
   // 本人が選んだ色(member.color: 1〜6)があればそれを使い、無ければ並び順から自動割り当て
