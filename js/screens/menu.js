@@ -276,24 +276,14 @@ App.screens = App.screens || {};
       container.appendChild(App.el("section", { class: "section" }, [App.sectionHeader("きろく・そうだん"), linkCard]));
 
       // ---- 設定 ----
-      const notifSwitch = App.el("button", {
-        class: "switch",
-        role: "switch",
-        "aria-checked": String(st.settings.notifications),
-        "aria-label": "通知(準備中)",
-        onclick: () => {
-          App.store.update((x) => { x.settings.notifications = !x.settings.notifications; });
-          App.toast(App.store.state.settings.notifications ? "通知をオンにしました(正式版で有効になります)" : "通知をオフにしました", "bell");
-        },
-      });
       const settingsCard = App.el("div", { class: "card card--lg" }, [
-        App.el("div", { class: "list-row" }, [
+        App.el("button", { class: "list-row", onclick: () => App.go("notifSettings") }, [
           App.el("span", { class: "list-row__icon", style: "background: var(--color-primary-light); color: var(--color-primary);", html: App.icon("bell", 18) }),
           App.el("span", { class: "list-row__body" }, [
-            App.el("span", { text: "通知" }),
-            App.el("span", { class: "list-row__sub", text: "LINE通知は正式版で対応予定" }),
+            App.el("span", { text: "通知・お知らせ" }),
+            App.el("span", { class: "list-row__sub", text: "お知らせに出す種類を設定" }),
           ]),
-          notifSwitch,
+          App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
         ]),
         App.el("button", { class: "list-row", onclick: openTeamSheet }, [
           App.el("span", { class: "list-row__icon", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("heart", 18) }),
@@ -320,6 +310,69 @@ App.screens = App.screens || {};
           class: "menu-version",
           text: `${window.APP_CONFIG.APP_NAME} v${window.APP_CONFIG.VERSION}${st.isMockData ? "(サンプルデータ表示中)" : ""}`,
         })
+      );
+    },
+  };
+
+  // ============================================
+  // 通知・お知らせ設定 — ホームのベル(お知らせ)に出す種類をオン・オフ
+  // 実際のLINEプッシュ配信はバックエンドが要るため正式版で対応(ここは表示制御)
+  // ============================================
+  App.screens.notifSettings = {
+    title: "通知・お知らせ",
+    back: true,
+
+    render(container) {
+      const st = App.store.state;
+      if (!st.settings.notifPrefs) st.settings.notifPrefs = {};
+      const prefs = st.settings.notifPrefs;
+
+      const cats = [
+        { key: "event", label: "予定", sub: "今日の予定", icon: "calendar", cat: "calendar" },
+        { key: "task", label: "やること", sub: "期限切れ・今日まで", icon: "check", cat: "task" },
+        { key: "plant", label: "植物のお世話", sub: "水やり・お手入れ適期", icon: "leaf", cat: "plant" },
+        { key: "match", label: "応援チームの試合", sub: "今日・前日のお知らせ", icon: "heart", cat: "family" },
+      ];
+
+      const card = App.el("div", { class: "card card--lg" });
+      cats.forEach((c) => {
+        const isOn = prefs[c.key] !== false;
+        const sw = App.el("button", {
+          class: "switch",
+          role: "switch",
+          "aria-checked": String(isOn),
+          "aria-label": `${c.label}のお知らせ`,
+          onclick: () => {
+            App.store.update((x) => {
+              if (!x.settings.notifPrefs) x.settings.notifPrefs = {};
+              x.settings.notifPrefs[c.key] = x.settings.notifPrefs[c.key] === false;
+            });
+          },
+        });
+        card.appendChild(
+          App.el("div", { class: "list-row" }, [
+            App.el("span", { class: "list-row__icon", style: `background: var(--cat-${c.cat}-bg); color: var(--cat-${c.cat});`, html: App.icon(c.icon, 18) }),
+            App.el("span", { class: "list-row__body" }, [
+              App.el("span", { text: c.label }),
+              App.el("span", { class: "list-row__sub", text: c.sub }),
+            ]),
+            sw,
+          ])
+        );
+      });
+
+      container.appendChild(
+        App.el("section", { class: "section" }, [App.sectionHeader("お知らせに出す種類", { icon: "bell" }), card])
+      );
+      container.appendChild(
+        App.el("section", { class: "section" }, [
+          App.el("div", { class: "card card--lg" }, [
+            App.el("p", {
+              style: "font-size: var(--text-sub); color: var(--color-text-secondary); line-height: var(--line-height);",
+              html: "オンにした種類が、ホーム右上のベル(お知らせ)に表示されます。<br>LINEへのプッシュ通知は正式版で対応予定です。",
+            }),
+          ]),
+        ])
       );
     },
   };

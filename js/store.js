@@ -190,6 +190,70 @@ window.App = window.App || {};
       });
       return items;
     },
+
+    // お知らせ(アプリ内通知)— 今日/期限まわりの「気づいてほしい」項目を集約する。
+    // settings.notifPrefs で種類ごとにオン・オフ(未設定なら全部オン)。
+    // 実データから毎回導出するので、完了・水やり等で対応すると自然に消える。
+    notifications() {
+      const t = today();
+      const prefs = (store.state.settings && store.state.settings.notifPrefs) || {};
+      const on = (cat) => prefs[cat] !== false;
+      const list = [];
+
+      // 期限切れ・今日までのやること(未完了)
+      if (on("task")) {
+        store.state.tasks
+          .filter((x) => !x.done && x.due && x.due <= t)
+          .sort((a, b) => (a.due || "").localeCompare(b.due || ""))
+          .forEach((x) =>
+            list.push({
+              cat: "task", icon: "check", title: x.title,
+              meta: x.due < t ? `期限切れ(${App.fmtDate(x.due)})` : "今日まで",
+              route: "tasks",
+            })
+          );
+      }
+
+      // 今日の予定(試合は「試合」種別、それ以外は「予定」種別で扱う)
+      this.todayEvents().forEach((e) => {
+        const isMatch = e.kind === "match";
+        if (isMatch ? !on("match") : !on("event")) return;
+        list.push({
+          cat: isMatch ? "match" : "event",
+          icon: isMatch ? "heart" : "calendar",
+          title: e.title.replace(/^⚽\s*/, ""),
+          meta: `今日 ${e.time || "終日"}`,
+          route: "calendar",
+        });
+      });
+
+      // 植物(水やり期限・お手入れ適期)
+      if (on("plant")) {
+        this.plantCareItems().forEach((p) =>
+          list.push({
+            cat: "plant", icon: p.kind === "water" ? "drop" : "leaf",
+            title: p.title, meta: p.meta, route: "plants",
+          })
+        );
+      }
+
+      // 明日の試合の前日お知らせ(今日の分は上の予定側に出る)
+      if (on("match")) {
+        const tomorrow = App.date.daysAhead(1);
+        store.state.events
+          .filter((e) => e.kind === "match" && e.date === tomorrow)
+          .forEach((e) =>
+            list.push({
+              cat: "match", icon: "heart",
+              title: e.title.replace(/^⚽\s*/, ""),
+              meta: `明日 ${e.time || ""}`.trim(),
+              route: "calendar",
+            })
+          );
+      }
+
+      return list;
+    },
   };
 
   // 植物由来タスクの完了処理(ホーム・やること画面のチェックから呼ばれる)

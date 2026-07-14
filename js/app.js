@@ -24,6 +24,41 @@ window.App = window.App || {};
     location.hash = route;
   };
 
+  // ---- お知らせ(アプリ内通知センター) ----
+  App.openNotifications = function () {
+    const items = App.data.notifications();
+    const content = [];
+    if (items.length === 0) {
+      content.push(App.emptyState("bell", "新しいお知らせはありません", "予定ややることの期限が近づくと、ここに表示されます。"));
+    } else {
+      const card = App.el("div", { class: "card card--lg" });
+      items.forEach((n) => {
+        card.appendChild(
+          App.el("button", {
+            class: "list-row",
+            "aria-label": `${n.title}(${n.meta})を開く`,
+            onclick: () => { s.close(); App.go(n.route); },
+          }, [
+            App.el("span", { class: "list-row__icon", style: "background: var(--color-primary-light); color: var(--color-primary);", html: App.icon(n.icon, 18) }),
+            App.el("span", { class: "list-row__body" }, [
+              App.el("span", { text: n.title }),
+              App.el("span", { class: "list-row__sub", text: n.meta }),
+            ]),
+            App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+          ])
+        );
+      });
+      content.push(card);
+    }
+    content.push(
+      App.el("p", {
+        style: "font-size: var(--text-caption); color: var(--color-text-muted); margin-top: var(--spacing-3); text-align: center;",
+        text: "LINEへのプッシュ通知は正式版で対応予定です。",
+      })
+    );
+    const s = App.sheet("お知らせ", content);
+  };
+
   // ---- ヘッダー ----
   function renderHeader(route) {
     const header = document.getElementById("app-header");
@@ -48,12 +83,17 @@ window.App = window.App || {};
             App.el("p", { class: "greeting__sub", text: g.sub }),
           ]),
           App.el("div", { class: "greeting__actions" }, [
-            App.el("button", {
-              class: "icon-btn",
-              "aria-label": "お知らせ",
-              html: App.icon("bell", 22),
-              onclick: () => App.toast("新しいお知らせはありません", "bell"),
-            }),
+            (() => {
+              const count = App.data.notifications().length;
+              return App.el("button", {
+                class: "icon-btn notif-btn",
+                "aria-label": count ? `お知らせ ${count}件` : "お知らせ",
+                onclick: App.openNotifications,
+              }, [
+                App.el("span", { style: "display: flex;", html: App.icon("bell", 22) }),
+                count ? App.el("span", { class: "notif-badge", text: count > 9 ? "9+" : String(count) }) : null,
+              ]);
+            })(),
             (() => {
               // 頭文字アバター(家族に同名がいればその色に揃える)
               const st = App.store.state;
