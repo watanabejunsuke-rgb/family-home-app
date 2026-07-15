@@ -49,6 +49,17 @@
 .icon { display: inline-flex; flex-shrink: 0; vertical-align: middle; }
 .icon svg { display: block; }
 
+/* ---- リンクあり印(メモ・やること等のプレビューで、本文にURLがある目印) ---- */
+.link-badge {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-right: 4px;
+  color: var(--color-primary);
+}
+
+/* ---- 本文中の自動リンク化されたURL(App.linkify) ---- */
+.auto-link { color: var(--color-primary); text-decoration: underline; word-break: break-all; }
+
 /* ---- ボタン ---- */
 .btn-primary {
   display: flex;

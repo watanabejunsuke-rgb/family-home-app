@@ -203,6 +203,16 @@ App.screens = App.screens || {};
       memoInput.focus();
     });
 
+    // メモにURLがあれば、その場で開けるボタンを出す(入力中もリアルタイムに追随)
+    const memoLinkBtn = App.el("button", { class: "btn-secondary", style: "margin-top: var(--spacing-2);", html: App.icon("link", 16) + "<span>リンクを開く</span>" });
+    const syncMemoLinkBtn = () => {
+      const url = App.firstUrl(memoInput.value);
+      memoLinkBtn.style.display = url ? "" : "none";
+      memoLinkBtn.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    };
+    memoInput.addEventListener("input", syncMemoLinkBtn);
+    syncMemoLinkBtn();
+
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "予定を追加" });
     const content = [
       App.field("予定の名前", titleInput),
@@ -217,6 +227,7 @@ App.screens = App.screens || {};
       colorField,
       memoToggle,
       memoField,
+      memoLinkBtn,
     ];
 
     // くり返しは新規追加のときだけ選べる(編集は常にその回だけへの変更として扱う)。
@@ -499,7 +510,12 @@ App.screens = App.screens || {};
           const avatars = App.memberBadges(ev);
           const titleWrap = App.el("div", { class: "schedule-item__title" }, [
             ev.title,
-            ev.memo ? App.el("span", { class: "schedule-item__memo", text: ev.memo }) : null,
+            ev.memo
+              ? App.el("span", { class: "schedule-item__memo" }, [
+                  App.firstUrl(ev.memo) ? App.el("span", { class: "link-badge", html: App.icon("link", 12) }) : null,
+                  ev.memo,
+                ])
+              : null,
           ]);
           const isAway = ev.kind === "match" && ev.venue === "away";
           const dot = App.el("span", {

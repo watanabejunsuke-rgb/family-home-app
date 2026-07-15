@@ -84,6 +84,42 @@ window.App = window.App || {};
     }, 2200);
   };
 
+  // ---- URLの検出・リンク化 ----
+  // メモ・やること・カレンダーのメモなど、貼り付けたURLを実際に開けるようにするための共通処理。
+  // 一覧のカードは丸ごとボタン(編集を開く)になっている箇所が多く、その中に<a>を入れると
+  // 「ボタンの中にリンク」という無効なネストになり挙動が不安定になるため、そうした箇所では
+  // firstUrlで検出だけしてアイコン表示+編集シート内の「リンクを開く」ボタンで対応する。
+  // ボタンに包まれていない場所(タスクのタイトル等)ではlinkifyで直接<a>化してよい。
+  const URL_RE = /https?:\/\/[^\s<>"']+/;
+  const trimTrailingPunct = (url) => url.replace(/[)\]}、。」』.,;:!?]+$/, "");
+
+  App.firstUrl = function (text) {
+    if (!text) return null;
+    const m = String(text).match(URL_RE);
+    return m ? trimTrailingPunct(m[0]) : null;
+  };
+
+  const escapeHtml = (s) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  App.linkify = function (text) {
+    if (!text) return "";
+    const re = new RegExp(URL_RE.source, "g");
+    let out = "";
+    let last = 0;
+    let m;
+    while ((m = re.exec(text))) {
+      out += escapeHtml(text.slice(last, m.index));
+      const url = trimTrailingPunct(m[0]);
+      const trail = m[0].slice(url.length);
+      const safe = escapeHtml(url);
+      out += `<a class="auto-link" href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>${escapeHtml(trail)}`;
+      last = re.lastIndex;
+    }
+    out += escapeHtml(text.slice(last));
+    return out;
+  };
+
   // 画像ファイルを縮小してbase64(プレフィックス無し)にする。
   // スマホ写真は数MB〜十数MBあるため、そのままアップロードすると重すぎる・遅すぎるので、
   // 長辺maxDimに収まるまで縮小してJPEG圧縮してから送る
@@ -303,7 +339,8 @@ window.App = window.App || {};
     });
     li.appendChild(check);
     const body = App.el("div", { class: "task-item__body" }, [
-      App.el("p", { class: "task-item__title", text: task.title }),
+      // タイトル欄はボタンに包まれていないので、URLがあれば直接タップして開けるようにする
+      App.el("p", { class: "task-item__title", html: App.linkify(task.title) }),
       meta ? App.el("p", { class: "task-item__meta", text: meta }) : null,
     ]);
     li.appendChild(body);

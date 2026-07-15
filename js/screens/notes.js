@@ -18,10 +18,21 @@ App.screens = App.screens || {};
     if (isEdit) bodyInput.value = note.body;
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "保存する" });
 
+    // 本文にURLがあれば、その場で開けるボタンを出す(入力中もリアルタイムに追随)
+    const linkBtn = App.el("button", { class: "btn-secondary", style: "margin-bottom: var(--spacing-3);", html: App.icon("link", 16) + "<span>リンクを開く</span>" });
+    const syncLinkBtn = () => {
+      const url = App.firstUrl(bodyInput.value);
+      linkBtn.style.display = url ? "" : "none";
+      linkBtn.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    };
+    bodyInput.addEventListener("input", syncLinkBtn);
+    syncLinkBtn();
+
     const content = [];
     if (isDiary) content.push(App.field("日付", dateInput));
     else content.push(App.field("タイトル", titleInput));
     content.push(App.field(isDiary ? "今日のできごと" : "内容", bodyInput));
+    content.push(linkBtn);
     content.push(saveBtn);
 
     // メモは「やること」に近い内容になることがあるので、ワンタップで移せる導線を置く
@@ -146,7 +157,10 @@ App.screens = App.screens || {};
               onclick: () => openNoteSheet(n),
             }, [
               n.title ? App.el("p", { class: "note-sticky__title", style: `color: ${c.fg};`, text: n.title }) : null,
-              App.el("p", { class: "note-sticky__body", text: n.body }),
+              App.el("p", { class: "note-sticky__body" }, [
+                App.firstUrl(n.body) ? App.el("span", { class: "link-badge", html: App.icon("link", 12) }) : null,
+                n.body,
+              ]),
             ])
           );
         });
@@ -162,7 +176,10 @@ App.screens = App.screens || {};
               onclick: () => openNoteSheet(n),
             }, [
               App.el("p", { class: "note-card__date", text: App.fmtDate(n.date) }),
-              App.el("p", { class: "note-card__body", text: n.body }),
+              App.el("p", { class: "note-card__body" }, [
+                App.firstUrl(n.body) ? App.el("span", { class: "link-badge", html: App.icon("link", 12) }) : null,
+                n.body,
+              ]),
             ])
           );
         });
