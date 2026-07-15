@@ -19,6 +19,10 @@ var PROP = PropertiesService.getScriptProperties();
 var SHEET_NAME = 'households';
 // 列: A householdId | B inviteCode | C members(JSON配列) | D data(JSON) | E updatedAt(ms)
 
+// 毎朝ダイジェストの末尾に添えるアプリ起動リンク。js/config.jsのLIFF_IDと
+// 同じもの(ドメインliff.line.me固定)。LIFF_IDを変更したらここも変更すること
+var LIFF_URL = 'https://liff.line.me/2010693415-ddc2Kd3X';
+
 function doGet() {
   return json({ ok: true, service: 'kurashi-note backend', ts: Date.now() });
 }
@@ -310,7 +314,7 @@ function buildDigestText(data, todayStr, tomorrowStr) {
   if (lines.plant.length) sections.push('🌱 植物\n' + lines.plant.map(function (t) { return '・' + t; }).join('\n'));
   if (lines.match.length) sections.push('⚽ 試合\n' + lines.match.map(function (t) { return '・' + t; }).join('\n'));
   if (!sections.length) return null;
-  return 'おはようございます。今日の暮らしnoteです。\n\n' + sections.join('\n\n');
+  return 'おはようございます。今日の暮らしnoteです。\n\n' + sections.join('\n\n') + '\n\n▶ アプリを開く\n' + LIFF_URL;
 }
 
 // LINE Messaging APIでテキストをpush送信
