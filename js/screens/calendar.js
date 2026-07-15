@@ -224,10 +224,11 @@ App.screens = App.screens || {};
     let recur = "none";
     let recurUntilInput = null;
     if (!isEdit) {
-      // 毎年(誕生日など)は1年後までだと1回しか作られないため、既定を10年先までにする
+      // 毎年(誕生日など)は「いつまで」をUIで聞かないため、内部で十分先(50年)まで
+      // 自動生成しておく。それ以外は1年先を初期値にする
       const defaultUntil = (mode) => {
         const d = new Date(dateInput.value + "T00:00:00");
-        d.setFullYear(d.getFullYear() + (mode === "yearly" ? 10 : 1));
+        d.setFullYear(d.getFullYear() + (mode === "yearly" ? 50 : 1));
         return App.date.str(d);
       };
       recurUntilInput = App.el("input", { type: "date", value: defaultUntil(recur) });
@@ -251,8 +252,10 @@ App.screens = App.screens || {};
         recur,
         (v) => {
           recur = v;
-          recurUntilField.style.display = v === "none" ? "none" : "";
-          if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(v);
+          // 毎年(誕生日など)は「いつまで」を聞かず、内部で十分先まで自動生成する。
+          // 見えない値なので、他モードで手入力した値が残っていても常に上書きする
+          recurUntilField.style.display = (v === "none" || v === "yearly") ? "none" : "";
+          if (v === "yearly" || !recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(v);
         }
       );
       // 日付を変えたら「毎週◯曜日」「毎月◯日」「毎年◯月◯日」の表示も追従させる
@@ -261,7 +264,7 @@ App.screens = App.screens || {};
         chipEls[1].textContent = recurLabel("weekly");
         chipEls[2].textContent = recurLabel("monthly");
         chipEls[3].textContent = recurLabel("yearly");
-        if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(recur);
+        if (recur === "yearly" || !recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(recur);
       });
       recurUntilInput.addEventListener("input", () => { recurUntilInput.dataset.touched = "1"; });
 
@@ -420,6 +423,10 @@ App.screens = App.screens || {};
         // 最大3件まで表示。それ以上は「+n件」を出さず切り捨てる
         // (全件は下の「選択日の予定」パネルで確認できるため)
         const eventsWrap = App.el("div", { class: "cal-day__events" });
+        // このセルで複数日予定が左/右のどちらかに継続しているか(セル自体の
+        // パディングを継ぎ目側だけ詰めて、隣のセルとの隙間を目立たなくする)
+        let bridgesLeft = false;
+        let bridgesRight = false;
         dayEvents.slice(0, MAX_CHIPS).forEach((e) => {
           const c = App.paletteColor(e.color || 0);
           // 応援チームの試合はホーム/アウェイをひと目で区別:ホーム=塗りつぶし、アウェイ=縁取り
@@ -437,15 +444,22 @@ App.screens = App.screens || {};
             const leftR = isRunStart ? "4px" : "0";
             const rightR = isRunEnd ? "4px" : "0";
             style += ` border-radius: ${leftR} ${rightR} ${rightR} ${leftR};`;
-            if (!isRunStart) label = " ";
+            if (!isRunStart) { label = " "; bridgesLeft = true; }
+            if (!isRunEnd) bridgesRight = true;
           }
           eventsWrap.appendChild(
             App.el("span", { class: "cal-day__chip", style, text: label })
           );
         });
 
+        // 継ぎ目側のセルパディングを0にして隣のセルとの隙間を詰める
+        let cellStyle = "";
+        if (bridgesLeft) cellStyle += "padding-left: 0;";
+        if (bridgesRight) cellStyle += "padding-right: 0;";
+
         const cell = App.el("button", {
           class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
+          style: cellStyle,
           "aria-pressed": String(ds === view.selected),
           "aria-label": `${d.getMonth() + 1}月${d.getDate()}日${holidayName ? "・" + holidayName : ""}${dayEvents.length ? "(予定あり)" : ""}`,
           onclick: () => { view.selected = ds; App.refresh(); },
