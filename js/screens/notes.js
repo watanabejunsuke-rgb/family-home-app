@@ -8,33 +8,12 @@ App.screens = App.screens || {};
   let tab = "memo"; // "memo" | "diary"
 
   // ---- 日記への写真登録(Google Driveに保存。植物の写真と同じ仕組みを流用) ----
-  const uploadingNoteIds = new Set();
-
   function photosOf(n) {
     if (!n.photos) n.photos = [];
     return n.photos;
   }
 
-  async function addNotePhoto(note, file) {
-    uploadingNoteIds.add(note.id);
-    App.refresh();
-    try {
-      const base64 = await App.compressImageFile(file);
-      const { id, url } = await App.sync.uploadPhoto(note.id, base64, "image/jpeg", note.id);
-      App.store.update((st) => {
-        const n = st.notes.find((x) => x.id === note.id);
-        if (n) photosOf(n).push({ id, url, addedAt: App.date.today() });
-      });
-      App.toast("写真を追加しました", "sparkle");
-    } catch (e) {
-      App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
-    } finally {
-      uploadingNoteIds.delete(note.id);
-      App.refresh();
-    }
-  }
-
-  function openNotePhotoSheet(note, photo) {
+  function openNotePhotoSheet(photo, onDelete) {
     const delBtn = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この写真を削除</span>" });
     const s = App.sheet("写真", [
       App.el("img", { src: photo.url, alt: "日記の写真", class: "photo-viewer__img" }),
@@ -42,12 +21,7 @@ App.screens = App.screens || {};
     ]);
     delBtn.addEventListener("click", () => {
       s.close();
-      App.store.update((st) => {
-        const n = st.notes.find((x) => x.id === note.id);
-        if (n) n.photos = photosOf(n).filter((ph) => ph.id !== photo.id);
-      });
-      App.sync.deletePhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
-      App.toast("写真を削除しました", "trash");
+      onDelete(photo);
     });
   }
 
@@ -55,6 +29,10 @@ App.screens = App.screens || {};
     const isEdit = !!note;
     const type = isEdit ? note.type : tab;
     const isDiary = type === "diary";
+    // 新規作成でも先にIDを決めておき、「保存」を待たずに下書き段階から写真を追加できるようにする
+    const noteId = isEdit ? note.id : App.uid();
+    let draftPhotos = isEdit ? photosOf(note).slice() : [];
+    let uploading = false;
 
     const titleInput = App.el("input", { type: "text", value: isEdit ? note.title : "", placeholder: "例:保育園の夏祭り" });
     const dateInput = App.el("input", { type: "date", value: isEdit ? note.date : App.date.today() });
@@ -78,19 +56,14 @@ App.screens = App.screens || {};
     content.push(App.field(isDiary ? "今日のできごと" : "内容", bodyInput));
     content.push(linkBtn);
 
-    // 日記への写真登録(保存済みの日記のみ。新規はまず保存してから、開き直して追加する)
-    if (isEdit && isDiary) {
+    // 日記への写真登録(新規作成中でも追加でき、保存すると日記に紐づく)
+    if (isDiary) {
+      const photoStrip = App.el("div", { class: "photo-strip" });
       const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
-      photoInput.addEventListener("change", () => {
-        const file = photoInput.files && photoInput.files[0];
-        if (file) addNotePhoto(note, file);
-        photoInput.value = "";
-      });
-      const uploading = uploadingNoteIds.has(note.id);
       const addTile = App.el("button", {
-        class: "photo-strip__add" + (uploading ? " is-uploading" : ""),
+        class: "photo-strip__add",
         "aria-label": "写真を追加",
-        html: uploading ? App.icon("clock", 20) : App.icon("plus", 20),
+        html: App.icon("plus", 20),
         onclick: () => {
           if (uploading) return;
           if (!App.sync.enabled()) {
@@ -100,21 +73,70 @@ App.screens = App.screens || {};
           photoInput.click();
         },
       });
+
+      // App.refreshは背後の画面(#screen)だけを再描画し、開いているシートには届かないため、
+      // 写真の増減はこの中で直接ストリップを描き直す
+      const renderPhotoStrip = () => {
+        photoStrip.innerHTML = "";
+        draftPhotos.forEach((ph) => {
+          photoStrip.appendChild(
+            App.el("button", {
+              class: "photo-strip__thumb",
+              "aria-label": "写真を見る",
+              style: `background-image: url('${ph.url}');`,
+              onclick: () => openNotePhotoSheet(ph, removeDraftPhoto),
+            })
+          );
+        });
+        photoStrip.appendChild(addTile);
+      };
+
+      // 編集中の日記なら、保存ボタンを待たずに写真の増減をその場で永続化する
+      const persistPhotos = () => {
+        if (!isEdit) return;
+        App.store.update((st) => {
+          const n = st.notes.find((x) => x.id === note.id);
+          if (n) n.photos = draftPhotos.slice();
+        });
+      };
+
+      function removeDraftPhoto(photo) {
+        draftPhotos = draftPhotos.filter((ph) => ph.id !== photo.id);
+        persistPhotos();
+        App.sync.deletePhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+        renderPhotoStrip();
+        App.toast("写真を削除しました", "trash");
+      }
+
+      photoInput.addEventListener("change", async () => {
+        const file = photoInput.files && photoInput.files[0];
+        photoInput.value = "";
+        if (!file) return;
+        uploading = true;
+        addTile.classList.add("is-uploading");
+        addTile.innerHTML = App.icon("clock", 20);
+        try {
+          const base64 = await App.compressImageFile(file);
+          const { id, url } = await App.sync.uploadPhoto(noteId, base64, "image/jpeg", noteId);
+          draftPhotos.push({ id, url, addedAt: App.date.today() });
+          persistPhotos();
+          App.toast("写真を追加しました", "sparkle");
+        } catch (e) {
+          App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
+        } finally {
+          uploading = false;
+          addTile.classList.remove("is-uploading");
+          addTile.innerHTML = App.icon("plus", 20);
+          renderPhotoStrip();
+        }
+      });
+
+      renderPhotoStrip();
       content.push(
         App.el("div", { class: "field" }, [
           App.el("span", { class: "field__label", text: "写真" }),
-          App.el("div", { class: "photo-strip" }, [
-            ...photosOf(note).map((ph) =>
-              App.el("button", {
-                class: "photo-strip__thumb",
-                "aria-label": "写真を見る",
-                style: `background-image: url('${ph.url}');`,
-                onclick: () => openNotePhotoSheet(note, ph),
-              })
-            ),
-            addTile,
-            photoInput,
-          ]),
+          photoStrip,
+          photoInput,
         ])
       );
     }
@@ -182,12 +204,13 @@ App.screens = App.screens || {};
           if (n) Object.assign(n, { title, body, date: isDiary ? dateInput.value : n.date, updatedAt: Date.now() });
         } else {
           st.notes.unshift({
-            id: App.uid(),
+            id: noteId,
             type,
             title: isDiary ? "" : title,
             body,
             date: isDiary ? dateInput.value : App.date.today(),
             updatedAt: Date.now(),
+            ...(draftPhotos.length ? { photos: draftPhotos.slice() } : {}),
           });
         }
       });
