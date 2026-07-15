@@ -51,10 +51,14 @@ window.App = window.App || {};
       content.push(card);
     }
     content.push(
-      App.el("p", {
-        style: "font-size: var(--text-caption); color: var(--color-text-muted); margin-top: var(--spacing-3); text-align: center;",
-        text: "LINEへのプッシュ通知は正式版で対応予定です。",
-      })
+      App.el("div", { style: "text-align: center; margin-top: var(--spacing-3);" }, [
+        App.el("button", {
+          class: "section-header__action",
+          style: "display: inline-flex;",
+          html: App.icon("settings", 14) + "<span>通知の設定</span>",
+          onclick: () => { s.close(); App.go("notifSettings"); },
+        }),
+      ])
     );
     const s = App.sheet("お知らせ", content);
     // 開いた=確認したとみなし、いまの項目を既読に(バッジは未読件数だけ残す)
