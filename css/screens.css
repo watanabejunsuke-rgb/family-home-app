@@ -419,6 +419,35 @@
   margin-top: var(--spacing-2);
 }
 
+/* ---- 植物図鑑:お世話ごよみ(12ヶ月ピル) ---- */
+.pedia-task { margin-bottom: var(--spacing-3); }
+.pedia-task__label {
+  font-size: var(--text-sub);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.pedia-task__note {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.pedia-months { display: flex; gap: 2px; }
+.pedia-month {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  padding: 4px 0;
+  border-radius: 4px;
+  background: var(--color-divider);
+  color: var(--color-text-muted);
+}
+.pedia-month.is-active {
+  background: var(--cat-plant-bg);
+  color: var(--cat-plant);
+  font-weight: 700;
+}
+.pedia-month.is-current { box-shadow: inset 0 0 0 1.5px var(--color-primary); }
+
 /* ---- AI相談 ---- */
 .ai-screen { display: flex; flex-direction: column; min-height: 100%; }
 .ai-notice {

@@ -146,10 +146,12 @@ App.screens = App.screens || {};
   }
 
   // ---- 植物本体の追加・編集シート ----
-  function openPlantSheet(plant) {
+  // opts.name / opts.cycleDays: 図鑑「うちの植物に追加」からの事前入力(新規時のみ)
+  function openPlantSheet(plant, opts) {
     const isEdit = !!plant;
-    let cycle = isEdit ? plant.cycleDays : 7;
-    const nameInput = App.el("input", { type: "text", value: isEdit ? plant.name : "", placeholder: "例:パキラ" });
+    opts = opts || {};
+    let cycle = isEdit ? plant.cycleDays : (opts.cycleDays || 7);
+    const nameInput = App.el("input", { type: "text", value: isEdit ? plant.name : (opts.name || ""), placeholder: "例:パキラ" });
     const placeInput = App.el("input", { type: "text", value: isEdit ? plant.place : "", placeholder: "例:リビング" });
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "植物を追加" });
 
@@ -159,7 +161,7 @@ App.screens = App.screens || {};
       App.el("div", { class: "field" }, [
         App.el("span", { class: "field__label", text: "水やりの間隔" }),
         App.chipSelect(
-          [3, 5, 7, 10, 14].map((d) => ({ value: d, label: `${d}日ごと` })),
+          [1, 2, 3, 5, 7, 10, 14].map((d) => ({ value: d, label: `${d}日ごと` })),
           cycle,
           (v) => (cycle = v)
         ),
@@ -203,13 +205,28 @@ App.screens = App.screens || {};
     });
   }
 
+  // 図鑑「うちの植物に追加」から呼べるよう公開(App.openTaskSheetと同じパターン)
+  App.openPlantSheet = openPlantSheet;
+
   App.screens.plants = {
     title: "植物の記録",
     back: true,
 
     render(container) {
       const plants = App.store.state.plants;
-      const section = App.el("section", { class: "section" });
+
+      // 図鑑への導線(何月に何をすべきかはこちらで確認できる)
+      container.appendChild(
+        App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [
+          App.sectionHeader("うちの植物", {
+            icon: "leaf",
+            actionLabel: "図鑑を見る",
+            onAction: () => App.go("pedia"),
+          }),
+        ])
+      );
+
+      const section = App.el("section", { class: "section", style: "margin-top: 0;" });
 
       if (plants.length === 0) {
         section.appendChild(

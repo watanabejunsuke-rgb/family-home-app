@@ -225,6 +225,7 @@ App.screens = App.screens || {};
         { label: "家族のようす", icon: "users", cat: "family", route: "family" },
         { label: "買い物リスト", icon: "cart", cat: "shopping", route: "shopping" },
         { label: "植物の記録", icon: "leaf", cat: "plant", route: "plants" },
+        { label: "植物図鑑", icon: "leaf", cat: "plant", route: "pedia" },
         { label: "メモ・日記", icon: "note", cat: "note", route: "notes" },
         { label: "AIに相談", icon: "sparkle", cat: "ai", route: "ai" },
       ];
