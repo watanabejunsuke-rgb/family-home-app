@@ -39,12 +39,13 @@ function doGet() {
 }
 
 function doPost(e) {
-  // LINEのWebhook(postbackボタン操作等)は、アプリ自身のAPI呼び出しと形が違う
-  // ({events:[...]}を持つ・idTokenを持たない)ので、先にそちらを判定して分岐する
-  var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-  if (body.events) return handleLineWebhook(e, body);
-
   try {
+    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+
+    // LINEのWebhook(postbackボタン操作等)は、アプリ自身のAPI呼び出しと形が違う
+    // ({events:[...]}を持つ・idTokenを持たない)ので、先にそちらを判定して分岐する
+    if (body.events) return handleLineWebhook(e, body);
+
     var userId = verifyIdToken(body.idToken); // 不正なら例外
     var action = body.action;
     var result;
