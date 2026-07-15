@@ -237,12 +237,15 @@ window.App = window.App || {};
     },
 
     // 図鑑由来の「今月のお世話ヒント」— うちの植物と図鑑を名前でゆるく突き合わせ、
-    // 今月が適期の作業を参考情報として返す(自分でお手入れ予定を登録済みの内容、
-    // 今月すでに「やった」記録がある内容は重複させない)。
+    // 今月が適期の作業を参考情報として返す。以下は今年すでに対応済みとみなし出さない:
+    // ・自分でお手入れ予定(careTasks)を登録済みのラベル
+    // ・今年、その作業の適期月のいずれかで「やった」記録(careLog)がある場合(複数月にまたがる
+    //   作業を最初の月で済ませても、翌月また出てこないように年単位でチェックする)
+    // ・「今年はやらない」を選んだ場合(plant.pediaSkips)。植え替え等、毎年やる必要はない作業向け
     // plantCareItemsと違いdoneの概念がない(月単位の目安のため)ので、チェック項目には混ぜない。
     plantPediaTips() {
       const cur = new Date().getMonth() + 1;
-      const curMonthPrefix = today().slice(0, 7);
+      const curYear = new Date().getFullYear();
       const items = [];
       store.state.plants.forEach((p) => {
         if (!p.name) return;
@@ -251,13 +254,20 @@ window.App = window.App || {};
         );
         if (!pedia) return;
         const ownLabels = (p.careTasks || []).map((c) => c.label);
-        const loggedThisMonth = (p.careLog || [])
-          .filter((c) => (c.doneAt || "").startsWith(curMonthPrefix))
-          .map((c) => c.label);
+        const skippedLabels = (p.pediaSkips || [])
+          .filter((s) => s.year === curYear)
+          .map((s) => s.label);
         (pedia.tasks || []).forEach((t) => {
           if (t.months.indexOf(cur) < 0) return;
           if (ownLabels.includes(t.label)) return;
-          if (loggedThisMonth.includes(t.label)) return;
+          if (skippedLabels.includes(t.label)) return;
+          const doneThisSeason = (p.careLog || []).some((c) => {
+            if (c.label !== t.label || !c.doneAt) return false;
+            const y = Number(c.doneAt.slice(0, 4));
+            const m = Number(c.doneAt.slice(5, 7));
+            return y === curYear && t.months.indexOf(m) >= 0;
+          });
+          if (doneThisSeason) return;
           items.push({
             id: `plant-pedia-${p.id}-${pedia.id}-${t.label}`,
             plantId: p.id,
@@ -277,6 +287,19 @@ window.App = window.App || {};
         if (!p) return;
         if (!p.careLog) p.careLog = [];
         p.careLog.push({ label, doneAt: today() });
+      });
+    },
+
+    // 図鑑ヒントを「今年はやらない」として今年いっぱい非表示にする(履歴には残さない)
+    skipPediaTip(plantId, label) {
+      const year = new Date().getFullYear();
+      store.update((st) => {
+        const p = st.plants.find((x) => x.id === plantId);
+        if (!p) return;
+        if (!p.pediaSkips) p.pediaSkips = [];
+        if (!p.pediaSkips.some((s) => s.label === label && s.year === year)) {
+          p.pediaSkips.push({ label, year });
+        }
       });
     },
 

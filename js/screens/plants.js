@@ -299,6 +299,15 @@ App.screens = App.screens || {};
                 App.el("div", { class: "plant-pedia-tip__row" }, [
                   App.el("p", { class: "plant-pedia-tip__item", text: `${t.label}・${t.meta}` }),
                   App.el("button", {
+                    class: "plant-pedia-tip__skip",
+                    "aria-label": `「${t.label}」を今年はやらない`,
+                    text: "今年は見送り",
+                    onclick: () => {
+                      App.data.skipPediaTip(p.id, t.label);
+                      App.toast(`「${t.label}」は今年は見送りにしました`, "info");
+                    },
+                  }),
+                  App.el("button", {
                     class: "plant-pedia-tip__done",
                     "aria-label": `「${t.label}」をやった記録として残す`,
                     text: "やった",

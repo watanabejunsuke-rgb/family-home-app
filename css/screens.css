@@ -368,6 +368,14 @@
   min-height: 28px;
 }
 .plant-pedia-tip__done:active { background: var(--cat-plant-bg); }
+.plant-pedia-tip__skip {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  padding: 4px var(--spacing-2);
+  min-height: 28px;
+  text-decoration: underline;
+}
 
 /* ---- 植物:最近のお世話履歴 ---- */
 .plant-care-history {
