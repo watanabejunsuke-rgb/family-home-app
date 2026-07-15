@@ -328,15 +328,18 @@ function sendDailyDigest() {
   });
 }
 
-// 【セットアップ用】この関数を1回だけ手動実行すると、毎朝7時に
+// 【セットアップ用】この関数を1回だけ手動実行すると、毎朝6時台(6:00〜7:00の
+// 間のどこか。GASの時間主導トリガーは分単位を指定できない仕様)に
 // sendDailyDigestを呼ぶトリガーが登録される。何度実行しても、先に同じ
 // トリガーがあれば削除してから作り直すので二重登録にはならない。
 // 時刻はGASプロジェクトのタイムゾーン設定に従う(プロジェクトの設定で
 // Asia/Tokyoになっているか確認しておくこと)。
+// ※時刻だけ変えたい場合は、コードを直さずGAS画面の「トリガー」一覧から
+// 該当トリガーを編集するだけでも変更できる。
 function createDailyDigestTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'sendDailyDigest') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('sendDailyDigest').timeBased().atHour(7).everyDays(1).create();
-  Logger.log('毎朝7時のトリガーを作成しました');
+  ScriptApp.newTrigger('sendDailyDigest').timeBased().atHour(6).everyDays(1).create();
+  Logger.log('毎朝6時台のトリガーを作成しました');
 }
