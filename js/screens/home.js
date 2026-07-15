@@ -186,6 +186,7 @@ App.screens.home = {
               const x = App.store.state.tasks.find((k) => k.id === t.id);
               if (x && x.done) App.toast("おつかれさま!1件完了しました");
             },
+            onEdit: App.openTaskSheet,
           })
         );
       });

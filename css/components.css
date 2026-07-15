@@ -270,6 +270,16 @@
   margin-top: 1px;
 }
 .task-item__edit { color: var(--color-text-muted); }
+/* メモ有りの目印。アイコン自体がタップ対象になるため見た目より広めの当たり判定を持たせる */
+.task-item__note-btn {
+  display: inline-flex;
+  color: var(--color-text-muted);
+  margin-left: var(--spacing-1);
+  padding: var(--spacing-1) !important;
+  margin-top: -6px;
+  margin-bottom: -6px;
+  vertical-align: middle;
+}
 
 /* ---- リスト行(メニュー等) ---- */
 .list-row {

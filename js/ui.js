@@ -324,6 +324,23 @@ window.App = window.App || {};
     scrollToSelected(minuteCol, minuteBtns, m, 0);
   }
 
+  // メモ付きのタスクは、編集画面を開かなくても内容(URL含む)をすぐ見られるようにする
+  function openTaskMemoSheet(task, onEdit) {
+    const editBtn = onEdit
+      ? App.el("button", { class: "btn-primary", style: "margin-top: var(--spacing-3);", text: "編集する" })
+      : null;
+    const s = App.sheet(task.title, [
+      App.el("p", { style: "white-space: pre-wrap; color: var(--color-text-secondary);", html: App.linkify(task.memo) }),
+      editBtn,
+    ].filter(Boolean));
+    if (editBtn) {
+      editBtn.addEventListener("click", () => {
+        s.close();
+        onEdit(task);
+      });
+    }
+  }
+
   // ---- タスク行(チェックアニメーション付き) ----
   App.taskItem = function (task, { onToggle, onEdit, meta } = {}) {
     const li = App.el("li", { class: "task-item" + (task.done ? " is-done" : "") });
@@ -342,7 +359,14 @@ window.App = window.App || {};
       App.el("p", { class: "task-item__title" }, [
         // タイトル欄はボタンに包まれていないので、URLがあれば直接タップして開けるようにする
         App.el("span", { html: App.linkify(task.title) }),
-        task.memo ? App.el("span", { class: "schedule-item__note-icon", html: App.icon("note", 13) }) : null,
+        task.memo
+          ? App.el("button", {
+              class: "task-item__note-btn",
+              "aria-label": "メモを見る",
+              html: App.icon("note", 13),
+              onclick: () => openTaskMemoSheet(task, onEdit),
+            })
+          : null,
       ]),
       meta ? App.el("p", { class: "task-item__meta", text: meta }) : null,
     ]);
