@@ -243,6 +243,28 @@ App.screens = App.screens || {};
     render(container) {
       const st = App.store.state;
 
+      // ---- はじめに(初回だけの案内カード。閉じると二度と出ない) ----
+      if (!st.settings.introDismissed) {
+        container.appendChild(
+          App.el("section", { class: "section" }, [
+            App.el("div", { class: "card card--lg", style: "position: relative;" }, [
+              App.el("button", {
+                class: "icon-btn",
+                style: "position: absolute; top: var(--spacing-2); right: var(--spacing-2);",
+                "aria-label": "この案内を閉じる",
+                html: App.icon("x", 18),
+                onclick: () => App.store.update((x) => { x.settings.introDismissed = true; }),
+              }),
+              App.el("p", { style: "font-weight: 600; margin-bottom: var(--spacing-2); padding-right: 32px;", text: "はじめに" }),
+              App.el("p", {
+                style: "font-size: var(--text-sub); color: var(--color-text-secondary); line-height: var(--line-height);",
+                text: "わが家ホームへようこそ。予定・やること・買い物・植物のお世話・メモ日記を、家族みんなで気軽に共有できます。右下の+からいつでも追加でき、変更はもう片方の端末にも自動で届きます。まずは「今日やること」や「買い物リスト」から使ってみてください。",
+              }),
+            ]),
+          ])
+        );
+      }
+
       // ---- プロフィール ----
       container.appendChild(
         App.el("section", { class: "section" }, [
