@@ -14,6 +14,9 @@ App.screens = App.screens || {};
     return p.careTasks;
   }
 
+  // アップロード中の植物ID(一時的な表示状態。永続化しない)
+  const uploadingIds = new Set();
+
   function fmtShort(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -152,6 +155,49 @@ App.screens = App.screens || {};
     App.toast(`「${task.label}」を完了しました`);
   }
 
+  // ---- 植物の写真登録(Google Driveに保存し、URLだけをplant.photosに持つ) ----
+  function photosOf(p) {
+    if (!p.photos) p.photos = [];
+    return p.photos;
+  }
+
+  async function addPhoto(plant, file) {
+    uploadingIds.add(plant.id);
+    App.refresh();
+    try {
+      const base64 = await App.compressImageFile(file);
+      const { id, url } = await App.sync.uploadPlantPhoto(plant.id, base64, "image/jpeg", plant.id);
+      App.store.update((st) => {
+        const p = st.plants.find((x) => x.id === plant.id);
+        if (p) photosOf(p).push({ id, url, addedAt: App.date.today() });
+      });
+      App.toast("写真を追加しました", "sparkle");
+    } catch (e) {
+      App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
+    } finally {
+      uploadingIds.delete(plant.id);
+      App.refresh();
+    }
+  }
+
+  function openPhotoSheet(plant, photo) {
+    const delBtn = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この写真を削除</span>" });
+    const s = App.sheet(plant.name, [
+      App.el("img", { src: photo.url, alt: `${plant.name}の写真`, class: "photo-viewer__img" }),
+      App.el("p", { class: "photo-viewer__date", text: `${App.fmtDate(photo.addedAt, { weekday: false })}に追加` }),
+      delBtn,
+    ]);
+    delBtn.addEventListener("click", () => {
+      s.close();
+      App.store.update((st) => {
+        const p = st.plants.find((x) => x.id === plant.id);
+        if (p) p.photos = photosOf(p).filter((ph) => ph.id !== photo.id);
+      });
+      App.sync.deletePlantPhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+      App.toast("写真を削除しました", "trash");
+    });
+  }
+
   // ---- 植物本体の追加・編集シート ----
   // opts.name / opts.cycleDays: 図鑑「うちの植物に追加」からの事前入力(新規時のみ)
   function openPlantSheet(plant, opts) {
@@ -205,7 +251,7 @@ App.screens = App.screens || {};
           const p = st.plants.find((x) => x.id === plant.id);
           if (p) Object.assign(p, { name, place: placeInput.value.trim(), cycleDays: cycle });
         } else {
-          st.plants.push({ id: App.uid(), name, place: placeInput.value.trim(), cycleDays: cycle, wateredAt: App.date.today(), careTasks: [], careLog: [] });
+          st.plants.push({ id: App.uid(), name, place: placeInput.value.trim(), cycleDays: cycle, wateredAt: App.date.today(), careTasks: [], careLog: [], photos: [] });
         }
       });
       App.toast(isEdit ? "変更しました" : `「${name}」を追加しました`);
@@ -341,6 +387,43 @@ App.screens = App.screens || {};
             ])
           : null;
 
+        // 写真(Driveに保存。サムネイル横並び+追加タイル)
+        const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
+        photoInput.addEventListener("change", () => {
+          const file = photoInput.files && photoInput.files[0];
+          if (file) addPhoto(p, file);
+          photoInput.value = "";
+        });
+        const uploading = uploadingIds.has(p.id);
+        const addTile = App.el("button", {
+          class: "photo-strip__add" + (uploading ? " is-uploading" : ""),
+          "aria-label": `「${p.name}」の写真を追加`,
+          html: uploading ? App.icon("clock", 20) : App.icon("plus", 20),
+          onclick: () => {
+            if (uploading) return;
+            if (!App.sync.enabled()) {
+              App.toast("写真の保存には「家族と共有」の設定が必要です", "info");
+              return;
+            }
+            photoInput.click();
+          },
+        });
+        const photoBox = App.el("div", { class: "plant-photos" }, [
+          App.el("p", { class: "plant-photos__label", text: "写真" }),
+          App.el("div", { class: "photo-strip" }, [
+            ...photosOf(p).map((ph) =>
+              App.el("button", {
+                class: "photo-strip__thumb",
+                "aria-label": `${p.name}の写真を見る`,
+                style: `background-image: url('${ph.url}');`,
+                onclick: () => openPhotoSheet(p, ph),
+              })
+            ),
+            addTile,
+            photoInput,
+          ]),
+        ]);
+
         section.appendChild(
           App.el("div", { class: "card card--lg plant-card" }, [
             App.el("div", { class: "plant-card__head" }, [
@@ -371,6 +454,7 @@ App.screens = App.screens || {};
             waterBtn,
             tipBox,
             careList,
+            photoBox,
             historyBox,
           ])
         );

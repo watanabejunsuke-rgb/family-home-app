@@ -1,8 +1,13 @@
 // ============================================
 // 暮らしnote — バックエンド(Google Apps Script)
-// 世帯データ同期 + 毎朝のLINEプッシュ通知(ダイジェスト)。
+// 世帯データ同期 + 毎朝のLINEプッシュ通知(ダイジェスト) + 植物の写真登録(Drive保存)。
 // 同期はフロントの store.load()/save() から呼ばれる。プッシュは時間主導
 // トリガー(sendDailyDigest)から呼ばれる。
+//
+// 植物の写真をアップロードする関数(uploadPlantPhoto)を初めて実行すると、
+// Google Driveへのアクセス許可を求める画面が出ることがある。その場合は許可すること
+// (エディタで保存しただけでは反映されず、「デプロイを管理→編集→新しいバージョン」の
+// 手順で再デプロイして初めて、公開中のWebアプリURLにこの変更が反映される点にも注意)。
 //
 // 秘密情報はここ(スクリプトプロパティ)にだけ置く。フロント(公開リポジトリ)には置かない。
 // 必要なスクリプトプロパティ:
@@ -40,6 +45,8 @@ function doPost(e) {
     else if (action === 'push') result = push(userId, body.data);
     else if (action === 'leave') result = leaveHousehold(userId);
     else if (action === 'setNotifPrefs') result = setNotifPrefs(userId, body.prefs);
+    else if (action === 'uploadPlantPhoto') result = uploadPlantPhoto(userId, body.plantId, body.mimeType, body.dataBase64, body.filename);
+    else if (action === 'deletePlantPhoto') result = deletePlantPhoto(userId, body.fileId);
     else throw new Error('unknown action: ' + action);
     return json(Object.assign({ ok: true }, result));
   } catch (err) {
@@ -219,6 +226,50 @@ function setNotifPrefs(userId, prefs) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ============================================
+// 植物の写真登録 — Googleドライブに保存し、URLだけをフロントのplant.photosに持たせる
+// (base64のまま同期データに入れるとスプレッドシートの1セル5万文字上限に即当たるため)
+// 初回実行時にDriveの認可(スコープ追加)を求められることがある。求められたら許可すること。
+// ============================================
+
+// 写真の保存先フォルダ(世帯ごとにサブフォルダを分ける)。無ければ作る
+function getPhotoFolder(householdId) {
+  var rootName = 'kurashi-note-plant-photos';
+  var roots = DriveApp.getFoldersByName(rootName);
+  var root = roots.hasNext() ? roots.next() : DriveApp.createFolder(rootName);
+  var subs = root.getFoldersByName(householdId);
+  return subs.hasNext() ? subs.next() : root.createFolder(householdId);
+}
+
+// 画像(base64)をアップロードし、「リンクを知っている全員が閲覧可」で共有してURLを返す
+// (LINEアプリ内ブラウザにはGoogleアカウントのログイン状態が無いため、限定共有だと表示できない)
+function uploadPlantPhoto(userId, plantId, mimeType, dataBase64, filename) {
+  var target = findByUser(readAll(sheet()), userId);
+  if (!target) throw new Error('世帯に参加していません');
+  if (!plantId || !dataBase64) throw new Error('必要な情報が不足しています');
+  var mime = mimeType || 'image/jpeg';
+  var bytes = Utilities.base64Decode(dataBase64);
+  var blob = Utilities.newBlob(bytes, mime, (filename || 'plant-photo') + '.jpg');
+  var folder = getPhotoFolder(target.householdId);
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  var id = file.getId();
+  return { id: id, url: 'https://lh3.googleusercontent.com/d/' + id };
+}
+
+// 写真を削除(Driveのゴミ箱へ)。既に無い場合は無視する
+function deletePlantPhoto(userId, fileId) {
+  var target = findByUser(readAll(sheet()), userId);
+  if (!target) throw new Error('世帯に参加していません');
+  if (!fileId) throw new Error('fileIdがありません');
+  try {
+    DriveApp.getFileById(fileId).setTrashed(true);
+  } catch (e) {
+    // 既に削除済み・権限エラー等は静かに無視(フロント側の表示からは消える)
+  }
+  return { deleted: true };
 }
 
 // ============================================

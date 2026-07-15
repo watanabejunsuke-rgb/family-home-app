@@ -111,6 +111,17 @@ window.App = window.App || {};
       }
     },
 
+    // 植物の写真をアップロード(base64→Driveに保存)。戻り値: {id, url}
+    // 世帯共有データそのものではない(URLだけを後でplant.photosに保存する)ので、
+    // enabled()判定はここでは行わず呼び出し側(画面)が確認する
+    async uploadPlantPhoto(plantId, dataBase64, mimeType, filename) {
+      const r = await this.call("uploadPlantPhoto", { plantId, dataBase64, mimeType, filename });
+      return { id: r.id, url: r.url };
+    },
+    async deletePlantPhoto(fileId) {
+      await this.call("deletePlantPhoto", { fileId });
+    },
+
     // 自分(このLINEアカウント)の通知オン・オフ設定をサーバーへ送る。
     // 世帯の共有データとは別枠(userIdごと)なので、他メンバーの設定には影響しない。
     // 失敗しても静かに諦める(次にトグルした時にまた送られる)
