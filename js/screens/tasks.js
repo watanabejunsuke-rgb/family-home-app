@@ -20,6 +20,34 @@ App.screens = App.screens || {};
     const dateField = App.field("日付", dateInput);
     dateField.style.display = mode === "date" ? "" : "none";
 
+    // メモは毎回必要なわけではないので、既に内容がある時だけ最初から開き、
+    // 無ければ「メモを追加」を押した時だけ出す(メモ→やること変換時はURL・詳細を引き継ぐ)
+    const initialMemo = isEdit ? task.memo || "" : opts.prefillMemo || "";
+    const memoInput = App.el("textarea", { style: "min-height: 64px;", placeholder: "詳しいメモやURLがあれば。" });
+    if (initialMemo) memoInput.value = initialMemo;
+    const memoField = App.field("メモ", memoInput);
+    const memoToggle = App.el("button", {
+      class: "section-header__action",
+      html: App.icon("plus", 14) + "<span>メモを追加</span>",
+    });
+    memoField.style.display = initialMemo ? "" : "none";
+    memoToggle.style.display = initialMemo ? "none" : "";
+    memoToggle.addEventListener("click", () => {
+      memoToggle.style.display = "none";
+      memoField.style.display = "";
+      memoInput.focus();
+    });
+
+    // メモにURLがあれば、その場で開けるボタンを出す(入力中もリアルタイムに追随)
+    const memoLinkBtn = App.el("button", { class: "btn-secondary", style: "margin-top: var(--spacing-2);", html: App.icon("link", 16) + "<span>リンクを開く</span>" });
+    const syncMemoLinkBtn = () => {
+      const url = App.firstUrl(memoInput.value);
+      memoLinkBtn.style.display = url ? "" : "none";
+      memoLinkBtn.onclick = () => window.open(url, "_blank", "noopener,noreferrer");
+    };
+    memoInput.addEventListener("input", syncMemoLinkBtn);
+    syncMemoLinkBtn();
+
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "やることを追加" });
 
     const content = [
@@ -40,6 +68,9 @@ App.screens = App.screens || {};
         ),
       ]),
       dateField,
+      memoToggle,
+      memoField,
+      memoLinkBtn,
       saveBtn,
     ];
     if (isEdit) {
@@ -72,13 +103,14 @@ App.screens = App.screens || {};
       }
       // 「日付を指定」で日付が空のときは今日として扱う
       const due = mode === "today" ? today : mode === "date" ? dateInput.value || today : null;
+      const memo = memoInput.value.trim();
       s.close();
       App.store.update((st) => {
         if (isEdit) {
           const t = st.tasks.find((x) => x.id === task.id);
-          if (t) Object.assign(t, { title, due });
+          if (t) Object.assign(t, { title, due, memo });
         } else {
-          st.tasks.push({ id: App.uid(), title, due, done: false, createdAt: Date.now() });
+          st.tasks.push({ id: App.uid(), title, due, memo, done: false, createdAt: Date.now() });
           if (opts.onCreate) opts.onCreate(st);
         }
       });

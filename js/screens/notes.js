@@ -7,7 +7,23 @@ App.screens = App.screens || {};
 (function () {
   let tab = "memo"; // "memo" | "diary"
 
-  // ---- 日記への写真登録(Google Driveに保存。植物の写真と同じ仕組みを流用) ----
+  // ---- 新規作成中の下書き(画面を離れても消えないよう端末内に残す。世帯同期はしない) ----
+  const DRAFT_KEY = "wagaya-home-note-draft-v1";
+  function loadDrafts() {
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveDraft(type, draft) {
+    const all = loadDrafts();
+    all[type] = draft;
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(all)); } catch (e) { /* 容量オーバー等は諦める */ }
+  }
+  function clearDraft(type) {
+    const all = loadDrafts();
+    delete all[type];
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(all)); } catch (e) { /* 容量オーバー等は諦める */ }
+  }
+
+  // ---- メモ・日記への写真登録(Google Driveに保存。植物の写真と同じ仕組みを流用) ----
   function photosOf(n) {
     if (!n.photos) n.photos = [];
     return n.photos;
@@ -29,16 +45,44 @@ App.screens = App.screens || {};
     const isEdit = !!note;
     const type = isEdit ? note.type : tab;
     const isDiary = type === "diary";
+    // 新規作成中に画面を離れても消えないよう、既存の下書きがあれば復元する(編集時は本物のデータがあるので対象外)
+    const draft = !isEdit ? loadDrafts()[type] : null;
     // 新規作成でも先にIDを決めておき、「保存」を待たずに下書き段階から写真を追加できるようにする
-    const noteId = isEdit ? note.id : App.uid();
-    let draftPhotos = isEdit ? photosOf(note).slice() : [];
+    const noteId = isEdit ? note.id : (draft && draft.noteId) || App.uid();
+    let draftPhotos = isEdit ? photosOf(note).slice() : (draft && draft.photos) || [];
     let uploading = false;
 
-    const titleInput = App.el("input", { type: "text", value: isEdit ? note.title : "", placeholder: "例:保育園の夏祭り" });
-    const dateInput = App.el("input", { type: "date", value: isEdit ? note.date : App.date.today() });
+    const titleInput = App.el("input", { type: "text", value: isEdit ? note.title : (draft && draft.title) || "", placeholder: "例:保育園の夏祭り" });
+    const dateInput = App.el("input", { type: "date", value: isEdit ? note.date : (draft && draft.date) || App.date.today() });
     const bodyInput = App.el("textarea", { placeholder: isDiary ? "今日あったこと、感じたことを自由に。" : "内容をメモしておきましょう。" });
     if (isEdit) bodyInput.value = note.body;
+    else if (draft && draft.body) bodyInput.value = draft.body;
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "保存する" });
+
+    if (!isEdit && draft && (draft.title || draft.body || draftPhotos.length)) {
+      App.toast("下書きを復元しました", "info");
+    }
+
+    // 新規作成中は入力のたびに下書きとして端末内に保存する(離脱しても次回復元できる)
+    let draftSaveTimer = null;
+    const commitDraft = () => {
+      if (isEdit) return;
+      const body = bodyInput.value;
+      const title = titleInput.value;
+      if (!body.trim() && !title.trim() && draftPhotos.length === 0) {
+        clearDraft(type);
+        return;
+      }
+      saveDraft(type, { noteId, title, body, date: dateInput.value, photos: draftPhotos, savedAt: Date.now() });
+    };
+    const commitDraftDebounced = () => {
+      if (isEdit) return;
+      clearTimeout(draftSaveTimer);
+      draftSaveTimer = setTimeout(commitDraft, 500);
+    };
+    titleInput.addEventListener("input", commitDraftDebounced);
+    bodyInput.addEventListener("input", commitDraftDebounced);
+    dateInput.addEventListener("input", commitDraftDebounced);
 
     // 本文にURLがあれば、その場で開けるボタンを出す(入力中もリアルタイムに追随)
     const linkBtn = App.el("button", { class: "btn-secondary", style: "margin-bottom: var(--spacing-3);", html: App.icon("link", 16) + "<span>リンクを開く</span>" });
@@ -56,8 +100,8 @@ App.screens = App.screens || {};
     content.push(App.field(isDiary ? "今日のできごと" : "内容", bodyInput));
     content.push(linkBtn);
 
-    // 日記への写真登録(新規作成中でも追加でき、保存すると日記に紐づく)
-    if (isDiary) {
+    // 写真登録(メモ・日記どちらも。新規作成中でも追加でき、保存すると紐づく)
+    {
       const photoStrip = App.el("div", { class: "photo-strip" });
       const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
       const addTile = App.el("button", {
@@ -91,13 +135,16 @@ App.screens = App.screens || {};
         photoStrip.appendChild(addTile);
       };
 
-      // 編集中の日記なら、保存ボタンを待たずに写真の増減をその場で永続化する
+      // 編集中なら保存ボタンを待たずに写真の増減をその場で永続化し、新規作成中なら下書きに反映する
       const persistPhotos = () => {
-        if (!isEdit) return;
-        App.store.update((st) => {
-          const n = st.notes.find((x) => x.id === note.id);
-          if (n) n.photos = draftPhotos.slice();
-        });
+        if (isEdit) {
+          App.store.update((st) => {
+            const n = st.notes.find((x) => x.id === note.id);
+            if (n) n.photos = draftPhotos.slice();
+          });
+        } else {
+          commitDraft();
+        }
       };
 
       function removeDraftPhoto(photo) {
@@ -151,13 +198,16 @@ App.screens = App.screens || {};
         html: App.icon("checkCircle", 16) + "<span>このメモをやることにする</span>",
       });
       convert.addEventListener("click", () => {
-        const title = (titleInput.value.trim() || bodyInput.value.trim().split("\n")[0] || "").slice(0, 60);
+        const body = bodyInput.value.trim();
+        const title = (titleInput.value.trim() || body.split("\n")[0] || "").slice(0, 60);
         if (!title) { App.toast("内容を入力してください", "info"); return; }
         s.close();
         // やること追加シートを開いて日付(今日/日付を指定/いつでも)を選んでもらう。
+        // URLや詳しい内容が消えてしまわないよう、本文はそのままメモ欄に引き継ぐ。
         // 保存されたときだけ元メモを削除する(キャンセルすればメモは残る)
         App.openTaskSheet(null, {
           prefillTitle: title,
+          prefillMemo: body,
           onCreate: (st) => { st.notes = st.notes.filter((n) => n.id !== note.id); },
           successToast: "やることに移しました",
         });
@@ -198,6 +248,8 @@ App.screens = App.screens || {};
         return;
       }
       s.close();
+      clearTimeout(draftSaveTimer);
+      if (!isEdit) clearDraft(type);
       App.store.update((st) => {
         if (isEdit) {
           const n = st.notes.find((x) => x.id === note.id);
@@ -270,6 +322,9 @@ App.screens = App.screens || {};
                 App.firstUrl(n.body) ? App.el("span", { class: "link-badge", html: App.icon("link", 12) }) : null,
                 n.body,
               ]),
+              n.photos && n.photos.length
+                ? App.el("p", { class: "note-sticky__meta", html: App.icon("camera", 12) + `<span>${n.photos.length}枚</span>` })
+                : null,
             ])
           );
         });

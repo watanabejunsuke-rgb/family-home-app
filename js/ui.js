@@ -339,8 +339,11 @@ window.App = window.App || {};
     });
     li.appendChild(check);
     const body = App.el("div", { class: "task-item__body" }, [
-      // タイトル欄はボタンに包まれていないので、URLがあれば直接タップして開けるようにする
-      App.el("p", { class: "task-item__title", html: App.linkify(task.title) }),
+      App.el("p", { class: "task-item__title" }, [
+        // タイトル欄はボタンに包まれていないので、URLがあれば直接タップして開けるようにする
+        App.el("span", { html: App.linkify(task.title) }),
+        task.memo ? App.el("span", { class: "schedule-item__note-icon", html: App.icon("note", 13) }) : null,
+      ]),
       meta ? App.el("p", { class: "task-item__meta", text: meta }) : null,
     ]);
     li.appendChild(body);

@@ -548,6 +548,14 @@
   color: var(--color-text-muted);
   margin-top: var(--spacing-2);
 }
+.note-sticky__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-2);
+}
 
 /* ---- 植物図鑑:お世話ごよみ(12ヶ月ピル) ---- */
 .pedia-task { margin-bottom: var(--spacing-3); }
