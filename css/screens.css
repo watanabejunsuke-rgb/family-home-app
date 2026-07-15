@@ -304,53 +304,83 @@
 }
 .shopping-add button:active { background: var(--color-primary-strong); }
 
-/* ---- 植物 ---- */
-.plant-card { margin-bottom: var(--spacing-3); }
-.plant-card__head {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-3);
+/* ---- 植物:一覧行(サムネ+状態1つ+水やりボタンのみに絞る) ---- */
+.plant-row { display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2); }
+.plant-row__main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--spacing-3);
+  background: var(--color-surface); border-radius: var(--radius-md); padding: var(--spacing-2) var(--spacing-3);
+  box-shadow: var(--shadow-card); text-align: left;
 }
-.plant-card__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background: var(--cat-plant-bg);
-  color: var(--cat-plant);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.plant-row__thumb {
+  width: 44px; height: 44px; border-radius: var(--radius-sm); flex-shrink: 0;
+  background-size: cover; background-position: center; background-color: var(--cat-plant-bg);
 }
-.plant-card__name { font-weight: 600; }
-.plant-card__place { font-size: var(--text-caption); color: var(--color-text-muted); }
-.plant-meter {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--color-divider);
-  overflow: hidden;
-  margin-bottom: var(--spacing-3);
+.plant-row__thumb--empty { display: flex; align-items: center; justify-content: center; color: var(--cat-plant); }
+.plant-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.plant-row__name { font-weight: 600; font-size: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plant-row__place { font-size: var(--text-caption); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plant-row__water {
+  flex-shrink: 0; width: var(--tap-target); height: var(--tap-target); border-radius: var(--radius-full);
+  background: var(--color-surface); box-shadow: var(--shadow-card); color: var(--color-text-muted);
+  display: flex; align-items: center; justify-content: center;
 }
-.plant-meter__bar {
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: var(--cat-plant);
-  transition: width var(--t-med);
+.plant-row__water--due { color: var(--color-on-primary); background: var(--cat-plant); }
+
+/* ---- 植物:詳細のヒーロー写真(最新の1枚。無ければ淡いグラデーション+葉アイコン) ---- */
+.plant-hero {
+  position: relative; height: 200px; border-radius: var(--radius-lg); overflow: hidden;
+  margin-top: var(--spacing-2); display: flex; align-items: flex-end;
+  background: linear-gradient(150deg, var(--color-primary-light) 0%, var(--color-accent-light) 100%);
 }
-.plant-card .btn-secondary { min-height: var(--tap-target); }
+.plant-hero__photo {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: none; padding: 0;
+  background-size: cover; background-position: center;
+}
+.plant-hero__scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(20,24,18,0.55) 100%);
+}
+.plant-hero--empty { justify-content: center; }
+.plant-hero__icon {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%);
+  color: var(--color-primary); opacity: 0.6;
+}
+.plant-hero--empty .plant-hero__caption { position: static; color: var(--color-primary-strong); text-shadow: none; padding: var(--spacing-4); width: 100%; }
+.plant-hero__caption {
+  position: relative; z-index: 1; padding: var(--spacing-4); color: var(--color-on-primary);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.plant-hero__name { font-size: var(--text-heading); font-weight: 700; }
+.plant-hero__place { font-size: var(--text-sub); opacity: 0.9; }
+
+/* ---- 植物:状態ヒーローカード(最優先①「今日やること」を一文で) ---- */
+.plant-status { margin-top: var(--spacing-3); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4); }
+.plant-status--calm { background: var(--color-primary-light); }
+.plant-status--warn { background: var(--color-warning-bg); }
+.plant-status__headline { font-weight: 700; font-size: var(--text-body); }
+.plant-status--calm .plant-status__headline { color: var(--color-primary-strong); }
+.plant-status--warn .plant-status__headline { color: var(--color-warning); }
+.plant-status__sub { font-size: var(--text-caption); color: var(--color-text-secondary); margin-top: 2px; }
+
+/* ---- 植物:クイック記録バー(最優先③ワンタップ記録) ---- */
+.quick-record-bar { display: flex; gap: var(--spacing-2); }
+.quick-record {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--color-surface); border-radius: var(--radius-md); box-shadow: var(--shadow-card);
+  padding: var(--spacing-2) 4px; min-height: var(--tap-target);
+}
+.quick-record:active { background: var(--cat-plant-bg); }
+.quick-record__icon { color: var(--cat-plant); display: flex; }
+.quick-record__label { font-size: 11px; color: var(--color-text-secondary); font-weight: 600; }
+
+/* ---- 植物:設定(折りたたみ内の項目行) ---- */
+.plant-settings__row { font-size: var(--text-sub); color: var(--color-text-secondary); padding: 4px 0; }
 
 /* ---- 植物:図鑑ヒント(参考情報。「やった」で履歴に記録できる) ---- */
 .plant-pedia-tip {
-  margin-top: var(--spacing-3);
   background: var(--cat-plant-bg);
   border-radius: var(--radius-sm);
   padding: var(--spacing-2) var(--spacing-3);
-}
-.plant-pedia-tip__label {
-  font-size: var(--text-caption);
-  font-weight: 600;
-  color: var(--cat-plant);
-  margin-bottom: 4px;
 }
 .plant-pedia-tip__row {
   display: flex;
@@ -385,34 +415,12 @@
 }
 
 /* ---- 植物:最近のお世話履歴 ---- */
-.plant-care-history {
-  margin-top: var(--spacing-3);
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--color-divider);
-}
-.plant-care-history__label {
-  font-size: var(--text-caption);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin-bottom: 2px;
-}
 .plant-care-history__items {
   font-size: var(--text-caption);
   color: var(--color-text-muted);
+  line-height: 1.7;
 }
 
-/* ---- 植物:写真 ---- */
-.plant-photos {
-  margin-top: var(--spacing-3);
-  padding-top: var(--spacing-2);
-  border-top: 1px solid var(--color-divider);
-}
-.plant-photos__label {
-  font-size: var(--text-caption);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin-bottom: var(--spacing-2);
-}
 .photo-strip {
   display: flex;
   gap: var(--spacing-2);

@@ -378,7 +378,7 @@ window.App = window.App || {};
           list.push({
             id: p.id,
             cat: "plant", icon: p.kind === "water" ? "drop" : "leaf",
-            title: p.title, meta: p.meta, route: "plants",
+            title: p.title, meta: p.meta, route: "plants", param: p.plantId,
           })
         );
         // 図鑑由来の今月のお世話ヒント(参考情報)
@@ -386,7 +386,7 @@ window.App = window.App || {};
           list.push({
             id: p.id,
             cat: "plant", icon: "leaf",
-            title: p.title, meta: p.meta, route: "plants",
+            title: p.title, meta: p.meta, route: "plants", param: p.plantId,
           })
         );
       }

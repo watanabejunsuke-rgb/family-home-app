@@ -1,5 +1,6 @@
 // ============================================
-// 植物の記録 — 水やり周期 + お手入れ予定(摘芯・植え替え等)
+// 植物の記録 — 一覧(今日どうするかだけの最小情報)+ 詳細(1鉢の物語)
+// 詳細は #plants/<id> というパラメータ付きルートで開く(app.jsのルーティング拡張に対応)。
 // お手入れ予定は「この日」または「期間(〇日〜〇日)」で登録できる。
 // ============================================
 window.App = window.App || {};
@@ -7,6 +8,8 @@ App.screens = App.screens || {};
 
 (function () {
   const CARE_TYPES = ["摘芯", "植え替え", "肥料", "剪定", "その他"];
+  // クイック記録バーに常設する種類(水やりは別枠でwateredAtを直接更新するため含めない)
+  const QUICK_CARE_LABELS = ["肥料", "植え替え", "剪定"];
 
   // 古いデータにcareTasksが無い場合に備える
   function careTasksOf(p) {
@@ -50,6 +53,56 @@ App.screens = App.screens || {};
   // 一覧での並び:適期・今日 → 近い順
   function careSortKey(t) {
     return t.mode === "range" ? t.startDate : t.date;
+  }
+
+  // 「今日やること」を1メッセージに要約する(最優先① — 一瞬で分かることを最重要視)。
+  // 優先度: 水やり目安日 > お手入れ予定(今日/適期/期限すぎ) > 平常時は次に何があるかを添える
+  function heroStatus(p) {
+    const today = App.date.today();
+    const waterLeft = App.plantDaysLeft(p);
+    if (waterLeft <= 0) {
+      return {
+        tone: "warn",
+        headline: `「${p.name}」に水やりの目安日です`,
+        sub: waterLeft === 0 ? "今日が目安日です" : `目安日から${-waterLeft}日たっています`,
+      };
+    }
+    const tasks = careTasksOf(p);
+    const withStatus = tasks.map((c) => ({ c, s: careStatus(c) }));
+    const urgent = withStatus.find((x) => ["今日", "いま適期", "すぎています", "期間すぎ"].includes(x.s.badge));
+    if (urgent) {
+      const { c, s } = urgent;
+      const phrase =
+        s.badge === "いま適期" ? "いま適期です" :
+        s.badge === "期間すぎ" ? "適期をすぎています" :
+        s.badge === "すぎています" ? "予定日をすぎています" : "予定日です";
+      return { tone: "warn", headline: `「${c.label}」が${phrase}`, sub: s.period };
+    }
+    // 平常時:水やりとお手入れ予定のうち、一番近いものを添える
+    let sub = `次の水やりまで あと${waterLeft}日`;
+    tasks.forEach((c) => {
+      const target = c.mode === "range" ? c.startDate : c.date;
+      if (!target) return;
+      const days = Math.round((new Date(target) - new Date(today)) / 86400000);
+      if (days >= 0 && days < waterLeft) sub = `「${c.label}」予定まで あと${days}日`;
+    });
+    return { tone: "calm", headline: "今日は何もしなくてOK", sub };
+  }
+
+  // クイック記録:同じ種類の予定(お手入れ予定)があれば完了扱いに、無ければその場でお世話履歴へ直接記録する
+  function quickRecord(plant, label) {
+    const pending = careTasksOf(plant).find((t) => t.label === label);
+    if (pending) {
+      completeCare(plant, pending);
+      return;
+    }
+    App.store.update((st) => {
+      const p = st.plants.find((x) => x.id === plant.id);
+      if (!p) return;
+      if (!p.careLog) p.careLog = [];
+      p.careLog.push({ label, doneAt: App.date.today() });
+    });
+    App.toast(`「${label}」を記録しました`, "checkCircle");
   }
 
   // ---- お手入れ予定の追加・編集シート ----
@@ -265,6 +318,8 @@ App.screens = App.screens || {};
           danger: true,
           onOk: () => {
             s.close();
+            // 削除は詳細画面(設定)からしか呼べないため、消えたページに留まらず先に一覧へ戻してから消す
+            App.go("plants");
             App.store.update((st) => {
               st.plants = st.plants.filter((p) => p.id !== plant.id);
             });
@@ -295,207 +350,347 @@ App.screens = App.screens || {};
   // 図鑑「うちの植物に追加」から呼べるよう公開(App.openTaskSheetと同じパターン)
   App.openPlantSheet = openPlantSheet;
 
-  App.screens.plants = {
-    title: "植物の記録",
-    back: true,
+  // ============================================
+  // 一覧 — 「今日どの鉢に触るべきか」だけが3秒で分かることに徹する
+  // ============================================
+  function renderPlantList(container) {
+    const plants = App.store.state.plants;
 
-    render(container) {
-      const plants = App.store.state.plants;
-      const pediaTips = App.data.plantPediaTips();
+    container.appendChild(
+      App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [
+        App.sectionHeader("うちの植物", {
+          icon: "leaf",
+          actionLabel: "図鑑を見る",
+          onAction: () => App.go("pedia"),
+        }),
+      ])
+    );
 
-      // 図鑑への導線(何月に何をすべきかはこちらで確認できる)
-      container.appendChild(
-        App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [
-          App.sectionHeader("うちの植物", {
-            icon: "leaf",
-            actionLabel: "図鑑を見る",
-            onAction: () => App.go("pedia"),
-          }),
+    const section = App.el("section", { class: "section", style: "margin-top: 0;" });
+
+    if (plants.length === 0) {
+      section.appendChild(
+        App.el("div", { class: "card card--lg" }, [
+          App.emptyState("leaf", "植物がまだ登録されていません", "右下の+から最初のひと鉢を追加しましょう。"),
         ])
       );
+    }
 
-      const section = App.el("section", { class: "section", style: "margin-top: 0;" });
+    // 対応が必要なものを先に(水やり目安日 → お手入れ適期・今日・期限すぎ → それ以外は登録順)
+    const rank = (p) => {
+      if (App.plantDaysLeft(p) <= 0) return 0;
+      const urgent = careTasksOf(p).some((t) => ["今日", "いま適期", "すぎています", "期間すぎ"].includes(careStatus(t).badge));
+      return urgent ? 1 : 2;
+    };
+    const sorted = [...plants].sort((a, b) => rank(a) - rank(b));
 
-      if (plants.length === 0) {
-        section.appendChild(
-          App.el("div", { class: "card card--lg" }, [
-            App.emptyState("leaf", "植物がまだ登録されていません", "右下の+から最初のひと鉢を追加しましょう。"),
-          ])
-        );
-      }
+    sorted.forEach((p) => {
+      const left = App.plantDaysLeft(p);
+      const due = left <= 0;
+      const careUrgent = careTasksOf(p).find((t) => ["今日", "いま適期", "すぎています", "期間すぎ"].includes(careStatus(t).badge));
+      const photos = photosOf(p);
+      const latestPhoto = photos.length ? photos[photos.length - 1] : null;
 
-      plants.forEach((p) => {
-        const left = App.plantDaysLeft(p);
-        const elapsedRatio = Math.min(1, Math.max(0, (p.cycleDays - left) / p.cycleDays));
-        const due = left <= 0;
-        const pedia = matchPedia(p);
-        const badge = due
-          ? App.el("span", { class: "badge badge--warning", text: "そろそろ水やり" })
-          : App.el("span", { class: "badge badge--muted", text: `あと${left}日` });
+      const thumb = latestPhoto
+        ? App.el("span", { class: "plant-row__thumb", style: `background-image: url('${latestPhoto.url}');` })
+        : App.el("span", { class: "plant-row__thumb plant-row__thumb--empty", html: App.icon("leaf", 20) });
 
-        const waterBtn = App.el("button", {
-          class: due ? "btn-primary" : "btn-secondary",
-          html: App.icon("drop", 18) + "<span>水やりした</span>",
-        });
-        waterBtn.addEventListener("click", () => {
+      let badge;
+      if (due) badge = App.el("span", { class: "badge badge--warning", text: "そろそろ水やり" });
+      else if (careUrgent) badge = App.el("span", { class: "badge badge--warning", text: careUrgent.label });
+      else badge = App.el("span", { class: "badge badge--muted", text: `あと${left}日` });
+
+      const navBtn = App.el("button", {
+        class: "plant-row__main",
+        "aria-label": `「${p.name}」の詳細を見る(${due ? "そろそろ水やり" : `あと${left}日`})`,
+        onclick: () => App.go("plants", p.id),
+      }, [
+        thumb,
+        App.el("span", { class: "plant-row__body" }, [
+          App.el("span", { class: "plant-row__name", text: p.name }),
+          App.el("span", { class: "plant-row__place", text: p.place || "置き場所未設定" }),
+        ]),
+        badge,
+      ]);
+
+      const waterBtn = App.el("button", {
+        class: "icon-btn plant-row__water" + (due ? " plant-row__water--due" : ""),
+        "aria-label": `「${p.name}」に水やりした`,
+        html: App.icon("drop", 20),
+        onclick: () => {
           App.store.update((st) => {
             const x = st.plants.find((k) => k.id === p.id);
             if (x) x.wateredAt = App.date.today();
           });
           App.toast(`「${p.name}」に水やりしました`, "drop");
-        });
+        },
+      });
 
-        // ---- お手入れ予定リスト ----
-        const careList = App.el("div", { class: "care-list" });
-        const tasks = [...careTasksOf(p)].sort((a, b) => careSortKey(a).localeCompare(careSortKey(b)));
-        tasks.forEach((t) => {
-          const st = careStatus(t);
-          careList.appendChild(
-            App.el("div", { class: "care-item" }, [
-              App.el("button", {
-                class: "care-item__main",
-                "aria-label": `「${t.label}」を編集`,
-                onclick: () => openCareSheet(p, t),
-              }, [
-                App.el("span", { class: "care-item__label", text: t.label }),
-                App.el("span", { class: "care-item__period", text: st.period }),
-              ]),
-              App.el("span", { class: `badge ${st.cls}`, text: st.badge }),
-              App.el("button", {
-                class: "icon-btn",
-                "aria-label": `「${t.label}」を完了にする`,
-                html: App.icon("check", 18),
-                onclick: () => completeCare(p, t),
-              }),
-            ])
-          );
-        });
-        careList.appendChild(
-          App.el("button", {
-            class: "section-header__action",
-            html: App.icon("plus", 14) + "<span>お手入れ予定を追加(摘芯・植え替えなど)</span>",
-            onclick: () => openCareSheet(p, null),
-          })
-        );
+      section.appendChild(App.el("div", { class: "plant-row" }, [navBtn, waterBtn]));
+    });
 
-        // 図鑑由来の今月のお世話ヒント(参考情報。「やった」を押すと履歴に記録され、今月は消える)
-        const myTips = pediaTips.filter((t) => t.plantId === p.id);
-        const tipBox = myTips.length
-          ? App.el("div", { class: "plant-pedia-tip" }, [
-              App.el("p", { class: "plant-pedia-tip__label", text: `今月のヒント(${new Date().getMonth() + 1}月)` }),
-              ...myTips.map((t) =>
-                App.el("div", { class: "plant-pedia-tip__row" }, [
-                  App.el("p", { class: "plant-pedia-tip__item", text: `${t.label}・${t.meta}` }),
-                  App.el("button", {
-                    class: "plant-pedia-tip__skip",
-                    "aria-label": `「${t.label}」を今年はやらない`,
-                    text: "今年は見送り",
-                    onclick: () => {
-                      App.data.skipPediaTip(p.id, t.label);
-                      App.toast(`「${t.label}」は今年は見送りにしました`, "info");
-                    },
-                  }),
-                  App.el("button", {
-                    class: "plant-pedia-tip__done",
-                    "aria-label": `「${t.label}」をやった記録として残す`,
-                    text: "やった",
-                    onclick: () => {
-                      App.data.logPediaTip(p.id, t.label);
-                      App.toast(`「${p.name}」の${t.label}を記録しました`, "checkCircle");
-                    },
-                  }),
-                ])
-              ),
-            ])
-          : null;
+    container.appendChild(section);
+    container.appendChild(App.fab("植物を追加", () => openPlantSheet(null)));
+  }
 
-        // 最近のお世話履歴(直近4件。水やりは頻度が高いので別扱い・ここには含めない)
-        const recentLog = [...(p.careLog || [])].sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || "")).slice(0, 4);
-        const historyBox = recentLog.length
-          ? App.el("div", { class: "plant-care-history" }, [
-              App.el("p", { class: "plant-care-history__label", text: "最近のお世話" }),
-              App.el("p", {
-                class: "plant-care-history__items",
-                text: recentLog.map((c) => `${fmtShort(c.doneAt)} ${c.label}`).join("・"),
-              }),
-            ])
-          : null;
+  // ============================================
+  // 詳細 — 1鉢の物語。写真→今日やること→記録→成長→履歴→設定の順
+  // ============================================
+  function renderPlantDetail(container, id) {
+    const p = App.store.state.plants.find((x) => x.id === id);
+    if (!p) {
+      container.appendChild(
+        App.el("div", { class: "card card--lg" }, [
+          App.emptyState("leaf", "この植物は見つかりません", "削除されたか、リンクが古い可能性があります。"),
+        ])
+      );
+      container.appendChild(
+        App.el("button", {
+          class: "btn-secondary", style: "margin-top: var(--spacing-3); width: 100%;",
+          text: "植物の一覧へ戻る", onclick: () => App.go("plants"),
+        })
+      );
+      return;
+    }
 
-        // 写真(Driveに保存。サムネイル横並び+追加タイル)
-        const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
-        photoInput.addEventListener("change", () => {
-          const file = photoInput.files && photoInput.files[0];
-          if (file) openPhotoConfirmSheet(p, file);
-          photoInput.value = "";
-        });
-        const uploading = uploadingIds.has(p.id);
-        const addTile = App.el("button", {
-          class: "photo-strip__add" + (uploading ? " is-uploading" : ""),
-          "aria-label": `「${p.name}」の写真を追加`,
-          html: uploading ? App.icon("clock", 20) : App.icon("plus", 20),
-          onclick: () => {
-            if (uploading) return;
-            if (!App.sync.enabled()) {
-              App.toast("写真の保存には「家族と共有」の設定が必要です", "info");
-              return;
-            }
-            photoInput.click();
-          },
-        });
-        const photoBox = App.el("div", { class: "plant-photos" }, [
-          App.el("p", { class: "plant-photos__label", text: "写真" }),
-          App.el("div", { class: "photo-strip" }, [
-            ...photosOf(p).map((ph) =>
-              App.el("button", {
-                class: "photo-strip__thumb",
-                "aria-label": `${p.name}の写真を見る`,
-                style: `background-image: url('${ph.url}');`,
-                onclick: () => openPhotoSheet(p, ph),
-              })
-            ),
-            addTile,
-            photoInput,
-          ]),
+    const status = heroStatus(p);
+    const pedia = matchPedia(p);
+    const photos = photosOf(p);
+    const heroPhoto = photos.length ? photos[photos.length - 1] : null;
+
+    // ---- ヒーロー写真(直近の写真。無ければ葉アイコン+淡いグラデーションへフォールバック) ----
+    const hero = App.el("div", { class: "plant-hero" + (heroPhoto ? "" : " plant-hero--empty") });
+    if (heroPhoto) {
+      hero.appendChild(
+        App.el("button", {
+          class: "plant-hero__photo",
+          "aria-label": "写真を見る",
+          style: `background-image: url('${heroPhoto.url}');`,
+          onclick: () => openPhotoSheet(p, heroPhoto),
+        })
+      );
+      hero.appendChild(App.el("div", { class: "plant-hero__scrim" }));
+    } else {
+      hero.appendChild(App.el("span", { class: "plant-hero__icon", html: App.icon("leaf", 36) }));
+    }
+    hero.appendChild(
+      App.el("div", { class: "plant-hero__caption" }, [
+        App.el("p", { class: "plant-hero__name", text: p.name }),
+        App.el("p", { class: "plant-hero__place", text: p.place || "置き場所未設定" }),
+      ])
+    );
+    container.appendChild(hero);
+
+    // ---- 状態ヒーローカード(最優先①:今日やることが一瞬で分かる) ----
+    container.appendChild(
+      App.el("div", { class: `plant-status plant-status--${status.tone}` }, [
+        App.el("p", { class: "plant-status__headline", text: status.headline }),
+        App.el("p", { class: "plant-status__sub", text: status.sub }),
+      ])
+    );
+
+    // ---- クイック記録バー(最優先③:ワンタップで記録) ----
+    const waterQuick = App.el("button", { class: "quick-record" }, [
+      App.el("span", { class: "quick-record__icon", html: App.icon("drop", 20) }),
+      App.el("span", { class: "quick-record__label", text: "水やり" }),
+    ]);
+    waterQuick.addEventListener("click", () => {
+      App.store.update((st) => {
+        const x = st.plants.find((k) => k.id === p.id);
+        if (x) x.wateredAt = App.date.today();
+      });
+      App.toast(`「${p.name}」に水やりしました`, "drop");
+    });
+    const quickBar = App.el("div", { class: "quick-record-bar" }, [
+      waterQuick,
+      ...QUICK_CARE_LABELS.map((label) => {
+        const btn = App.el("button", { class: "quick-record" }, [
+          App.el("span", { class: "quick-record__icon", html: App.icon("leaf", 20) }),
+          App.el("span", { class: "quick-record__label", text: label }),
         ]);
+        btn.addEventListener("click", () => quickRecord(p, label));
+        return btn;
+      }),
+    ]);
+    container.appendChild(App.el("section", { class: "section" }, [quickBar]));
 
-        section.appendChild(
-          App.el("div", { class: "card card--lg plant-card" }, [
-            App.el("div", { class: "plant-card__head" }, [
-              App.el("span", { class: "plant-card__icon", html: App.icon("leaf", 20) }),
-              App.el("div", { style: "flex: 1; min-width: 0;" }, [
-                App.el("p", { class: "plant-card__name", text: p.name }),
-                App.el("p", { class: "plant-card__place", text: `${p.place || "場所未設定"}・${p.cycleDays}日ごと・前回 ${App.fmtDate(p.wateredAt, { weekday: false })}` }),
-              ]),
-              badge,
-              pedia
-                ? App.el("button", {
-                    class: "icon-btn",
-                    "aria-label": `「${p.name}」を図鑑で見る`,
-                    html: App.icon("note", 18),
-                    onclick: () => App.openPediaFor(pedia.id),
-                  })
-                : null,
-              App.el("button", {
-                class: "icon-btn",
-                "aria-label": `「${p.name}」を編集`,
-                html: App.icon("edit", 18),
-                onclick: () => openPlantSheet(p),
-              }),
+    // ---- お手入れ予定(あらかじめ日程を決めておくもの) ----
+    const careSection = App.el("section", { class: "section" }, [
+      App.sectionHeader("お手入れ予定", { icon: "leaf" }),
+    ]);
+    const careCard = App.el("div", { class: "card card--lg" });
+    const careList = App.el("div", { class: "care-list" });
+    const tasks = [...careTasksOf(p)].sort((a, b) => careSortKey(a).localeCompare(careSortKey(b)));
+    if (tasks.length === 0) {
+      careCard.appendChild(App.emptyState("leaf", "予定はまだありません", "植え替え・剪定などの予定日を決めておけます。"));
+    } else {
+      tasks.forEach((t) => {
+        const st = careStatus(t);
+        careList.appendChild(
+          App.el("div", { class: "care-item" }, [
+            App.el("button", {
+              class: "care-item__main",
+              "aria-label": `「${t.label}」を編集`,
+              onclick: () => openCareSheet(p, t),
+            }, [
+              App.el("span", { class: "care-item__label", text: t.label }),
+              App.el("span", { class: "care-item__period", text: st.period }),
             ]),
-            App.el("div", { class: "plant-meter" }, [
-              App.el("div", { class: "plant-meter__bar", style: `width: ${Math.round(elapsedRatio * 100)}%;${due ? " background: var(--color-warning);" : ""}` }),
-            ]),
-            waterBtn,
-            tipBox,
-            careList,
-            photoBox,
-            historyBox,
+            App.el("span", { class: `badge ${st.cls}`, text: st.badge }),
+            App.el("button", {
+              class: "icon-btn",
+              "aria-label": `「${t.label}」を完了にする`,
+              html: App.icon("check", 18),
+              onclick: () => completeCare(p, t),
+            }),
           ])
         );
       });
+      careCard.appendChild(careList);
+    }
+    careCard.appendChild(
+      App.el("button", {
+        class: "section-header__action",
+        style: "margin-top: var(--spacing-2);",
+        html: App.icon("plus", 14) + "<span>お手入れ予定を追加(摘芯・植え替えなど)</span>",
+        onclick: () => openCareSheet(p, null),
+      })
+    );
+    careSection.appendChild(careCard);
+    container.appendChild(careSection);
 
-      container.appendChild(section);
-      container.appendChild(App.fab("植物を追加", () => openPlantSheet(null)));
+    // ---- 成長の記録:写真タイムライン(最優先②:育っている実感) ----
+    const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
+    photoInput.addEventListener("change", () => {
+      const file = photoInput.files && photoInput.files[0];
+      if (file) openPhotoConfirmSheet(p, file);
+      photoInput.value = "";
+    });
+    const uploading = uploadingIds.has(p.id);
+    const addTile = App.el("button", {
+      class: "photo-strip__add" + (uploading ? " is-uploading" : ""),
+      "aria-label": `「${p.name}」の写真を追加`,
+      html: uploading ? App.icon("clock", 20) : App.icon("plus", 20),
+      onclick: () => {
+        if (uploading) return;
+        if (!App.sync.enabled()) {
+          App.toast("写真の保存には「家族と共有」の設定が必要です", "info");
+          return;
+        }
+        photoInput.click();
+      },
+    });
+    const growthSection = App.el("section", { class: "section" }, [
+      App.sectionHeader(photos.length ? `成長の記録(${photos.length}枚)` : "成長の記録", { icon: "camera" }),
+    ]);
+    const growthCard = App.el("div", { class: "card card--lg" }, [
+      App.el("div", { class: "photo-strip" }, [
+        ...[...photos].reverse().map((ph) =>
+          App.el("button", {
+            class: "photo-strip__thumb",
+            "aria-label": `${p.name}の写真を見る(${App.fmtDate(ph.addedAt, { weekday: false })})`,
+            style: `background-image: url('${ph.url}');`,
+            onclick: () => openPhotoSheet(p, ph),
+          })
+        ),
+        addTile,
+        photoInput,
+      ]),
+    ]);
+    growthSection.appendChild(growthCard);
+    container.appendChild(growthSection);
+
+    // ---- 最近のお世話履歴 ----
+    const recentLog = [...(p.careLog || [])].sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || "")).slice(0, 8);
+    if (recentLog.length) {
+      container.appendChild(
+        App.el("section", { class: "section" }, [
+          App.sectionHeader("最近のお世話", { icon: "clock" }),
+          App.el("div", { class: "card card--lg" }, [
+            App.el("p", {
+              class: "plant-care-history__items",
+              text: recentLog.map((c) => `${fmtShort(c.doneAt)} ${c.label}`).join("・"),
+            }),
+          ]),
+        ])
+      );
+    }
+
+    // ---- 今月の図鑑ヒント(参考情報) ----
+    const myTips = App.data.plantPediaTips().filter((t) => t.plantId === p.id);
+    if (myTips.length) {
+      container.appendChild(
+        App.el("section", { class: "section" }, [
+          App.sectionHeader(`今月のヒント(${new Date().getMonth() + 1}月)`, { icon: "note" }),
+          App.el("div", { class: "plant-pedia-tip" }, myTips.map((t) =>
+            App.el("div", { class: "plant-pedia-tip__row" }, [
+              App.el("p", { class: "plant-pedia-tip__item", text: `${t.label}・${t.meta}` }),
+              App.el("button", {
+                class: "plant-pedia-tip__skip",
+                "aria-label": `「${t.label}」を今年はやらない`,
+                text: "今年は見送り",
+                onclick: () => {
+                  App.data.skipPediaTip(p.id, t.label);
+                  App.toast(`「${t.label}」は今年は見送りにしました`, "info");
+                },
+              }),
+              App.el("button", {
+                class: "plant-pedia-tip__done",
+                "aria-label": `「${t.label}」をやった記録として残す`,
+                text: "やった",
+                onclick: () => {
+                  App.data.logPediaTip(p.id, t.label);
+                  App.toast(`「${p.name}」の${t.label}を記録しました`, "checkCircle");
+                },
+              }),
+            ])
+          )),
+        ])
+      );
+    }
+
+    // ---- 設定(置き場所・周期・図鑑・編集・削除。折りたたみ) ----
+    const settingsCard = App.el("div", { class: "card card--lg", style: "display: none;" }, [
+      App.el("p", { class: "plant-settings__row", text: `置き場所:${p.place || "未設定"}` }),
+      App.el("p", { class: "plant-settings__row", text: `水やりの間隔:${p.cycleDays}日ごと` }),
+      App.el("p", { class: "plant-settings__row", text: `前回の水やり:${App.fmtDate(p.wateredAt, { weekday: false })}` }),
+      pedia
+        ? App.el("button", {
+            class: "section-header__action", style: "margin-top: var(--spacing-3);",
+            html: App.icon("note", 14) + "<span>図鑑でこの植物を見る</span>",
+            onclick: () => App.openPediaFor(pedia.id),
+          })
+        : null,
+      App.el("button", {
+        class: "btn-secondary", style: "margin-top: var(--spacing-4); width: 100%;",
+        html: App.icon("edit", 16) + "<span>植物の情報を編集(削除もこちらから)</span>",
+        onclick: () => openPlantSheet(p),
+      }),
+    ]);
+    const settingsToggle = App.el("button", {
+      class: "section-header__action",
+      html: App.icon("settings", 14) + "<span>設定を見る(置き場所・水やり周期など)</span>",
+    });
+    settingsToggle.addEventListener("click", () => {
+      settingsToggle.style.display = "none";
+      settingsCard.style.display = "";
+    });
+    container.appendChild(
+      App.el("section", { class: "section" }, [settingsToggle, settingsCard])
+    );
+  }
+
+  App.screens.plants = {
+    title: (id) => {
+      if (!id) return "植物の記録";
+      const p = App.store.state.plants.find((x) => x.id === id);
+      return p ? p.name : "植物の記録";
+    },
+    back: true,
+
+    render(container, id) {
+      if (id) renderPlantDetail(container, id);
+      else renderPlantList(container);
     },
   };
 })();

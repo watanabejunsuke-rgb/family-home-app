@@ -11,17 +11,29 @@ window.App = window.App || {};
     { route: "menu", label: "メニュー", icon: "menu" },
   ];
 
+  // ルートは "plants" のような固定名の他に "plants/abc123" のようにIDを1つだけ
+  // 付けられる(スラッシュ以降をparamとして画面に渡す)。それ以上の階層は今のところ不要。
+  function currentHash() {
+    return (location.hash || "#home").slice(1);
+  }
+  function parseRoute() {
+    const raw = currentHash();
+    const i = raw.indexOf("/");
+    const route = i === -1 ? raw : raw.slice(0, i);
+    const param = i === -1 ? null : raw.slice(i + 1);
+    return App.screens[route] ? { route, param } : { route: "home", param: null };
+  }
   function currentRoute() {
-    const r = (location.hash || "#home").slice(1);
-    return App.screens[r] ? r : "home";
+    return parseRoute().route;
   }
 
-  App.go = function (route) {
-    if (route === currentRoute()) {
+  App.go = function (route, param) {
+    const hash = param ? `${route}/${param}` : route;
+    if (hash === currentHash()) {
       App.refresh();
       return;
     }
-    location.hash = route;
+    location.hash = hash;
   };
 
   // ---- お知らせ(アプリ内通知センター) ----
@@ -37,7 +49,7 @@ window.App = window.App || {};
           App.el("button", {
             class: "list-row",
             "aria-label": `${n.title}(${n.meta})を開く`,
-            onclick: () => { s.close(); App.go(n.route); },
+            onclick: () => { s.close(); App.go(n.route, n.param); },
           }, [
             App.el("span", { class: "list-row__icon", style: "background: var(--color-primary-light); color: var(--color-primary);", html: App.icon(n.icon, 18) }),
             App.el("span", { class: "list-row__body" }, [
@@ -66,16 +78,23 @@ window.App = window.App || {};
   };
 
   // ---- ヘッダー ----
-  function renderHeader(route) {
+  // title/back/noHeaderは固定値の他に (param) => value という関数でもよい。
+  // 詳細画面(例:植物名を見出しにする)のように、同じ画面定義でルートIDに応じて見出しを変えたい場合に使う。
+  function resolve(v, param) {
+    return typeof v === "function" ? v(param) : v;
+  }
+
+  function renderHeader(route, param) {
     const header = document.getElementById("app-header");
     header.innerHTML = "";
     const screen = App.screens[route];
+    const noHeader = resolve(screen.noHeader, param);
 
     // 画面自身が見出しを兼ねるコンテンツを持つ場合(カレンダーの月表示など)、
     // 共通ヘッダーは表示しない。ただしセーフエリア分の余白は#app-headerの
     // paddingとして残すので、ノッチにコンテンツが被ることはない(圧縮版のpadding)
-    header.classList.toggle("app-header--compact", !!screen.noHeader);
-    if (screen.noHeader) return;
+    header.classList.toggle("app-header--compact", !!noHeader);
+    if (noHeader) return;
 
     if (screen.greeting) {
       const g = App.greeting();
@@ -119,8 +138,9 @@ window.App = window.App || {};
       return;
     }
 
-    const bar = App.el("div", { class: "app-header" + (screen.back ? " app-header--sub" : "") });
-    if (screen.back) {
+    const back = resolve(screen.back, param);
+    const bar = App.el("div", { class: "app-header" + (back ? " app-header--sub" : "") });
+    if (back) {
       bar.appendChild(
         App.el("button", {
           class: "icon-btn",
@@ -133,7 +153,7 @@ window.App = window.App || {};
         })
       );
     }
-    bar.appendChild(App.el("h1", { class: "app-header__title", text: screen.title }));
+    bar.appendChild(App.el("h1", { class: "app-header__title", text: resolve(screen.title, param) }));
     header.appendChild(bar);
   }
 
@@ -159,12 +179,12 @@ window.App = window.App || {};
   // ---- 画面描画 ----
   let lastRoute = null;
   function render() {
-    const route = currentRoute();
+    const { route, param } = parseRoute();
     const main = document.getElementById("screen");
     main.innerHTML = "";
-    renderHeader(route);
+    renderHeader(route, param);
     renderNav(route);
-    App.screens[route].render(main);
+    App.screens[route].render(main, param);
     if (route !== lastRoute) {
       main.classList.remove("entering");
       void main.offsetWidth; // アニメーション再発火
