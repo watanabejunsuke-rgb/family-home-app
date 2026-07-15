@@ -7,6 +7,50 @@ App.screens = App.screens || {};
 (function () {
   let tab = "memo"; // "memo" | "diary"
 
+  // ---- 日記への写真登録(Google Driveに保存。植物の写真と同じ仕組みを流用) ----
+  const uploadingNoteIds = new Set();
+
+  function photosOf(n) {
+    if (!n.photos) n.photos = [];
+    return n.photos;
+  }
+
+  async function addNotePhoto(note, file) {
+    uploadingNoteIds.add(note.id);
+    App.refresh();
+    try {
+      const base64 = await App.compressImageFile(file);
+      const { id, url } = await App.sync.uploadPhoto(note.id, base64, "image/jpeg", note.id);
+      App.store.update((st) => {
+        const n = st.notes.find((x) => x.id === note.id);
+        if (n) photosOf(n).push({ id, url, addedAt: App.date.today() });
+      });
+      App.toast("写真を追加しました", "sparkle");
+    } catch (e) {
+      App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
+    } finally {
+      uploadingNoteIds.delete(note.id);
+      App.refresh();
+    }
+  }
+
+  function openNotePhotoSheet(note, photo) {
+    const delBtn = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この写真を削除</span>" });
+    const s = App.sheet("写真", [
+      App.el("img", { src: photo.url, alt: "日記の写真", class: "photo-viewer__img" }),
+      delBtn,
+    ]);
+    delBtn.addEventListener("click", () => {
+      s.close();
+      App.store.update((st) => {
+        const n = st.notes.find((x) => x.id === note.id);
+        if (n) n.photos = photosOf(n).filter((ph) => ph.id !== photo.id);
+      });
+      App.sync.deletePhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+      App.toast("写真を削除しました", "trash");
+    });
+  }
+
   function openNoteSheet(note) {
     const isEdit = !!note;
     const type = isEdit ? note.type : tab;
@@ -33,6 +77,48 @@ App.screens = App.screens || {};
     else content.push(App.field("タイトル", titleInput));
     content.push(App.field(isDiary ? "今日のできごと" : "内容", bodyInput));
     content.push(linkBtn);
+
+    // 日記への写真登録(保存済みの日記のみ。新規はまず保存してから、開き直して追加する)
+    if (isEdit && isDiary) {
+      const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
+      photoInput.addEventListener("change", () => {
+        const file = photoInput.files && photoInput.files[0];
+        if (file) addNotePhoto(note, file);
+        photoInput.value = "";
+      });
+      const uploading = uploadingNoteIds.has(note.id);
+      const addTile = App.el("button", {
+        class: "photo-strip__add" + (uploading ? " is-uploading" : ""),
+        "aria-label": "写真を追加",
+        html: uploading ? App.icon("clock", 20) : App.icon("plus", 20),
+        onclick: () => {
+          if (uploading) return;
+          if (!App.sync.enabled()) {
+            App.toast("写真の保存には「家族と共有」の設定が必要です", "info");
+            return;
+          }
+          photoInput.click();
+        },
+      });
+      content.push(
+        App.el("div", { class: "field" }, [
+          App.el("span", { class: "field__label", text: "写真" }),
+          App.el("div", { class: "photo-strip" }, [
+            ...photosOf(note).map((ph) =>
+              App.el("button", {
+                class: "photo-strip__thumb",
+                "aria-label": "写真を見る",
+                style: `background-image: url('${ph.url}');`,
+                onclick: () => openNotePhotoSheet(note, ph),
+              })
+            ),
+            addTile,
+            photoInput,
+          ]),
+        ])
+      );
+    }
+
     content.push(saveBtn);
 
     // メモは「やること」に近い内容になることがあるので、ワンタップで移せる導線を置く
@@ -180,6 +266,9 @@ App.screens = App.screens || {};
                 App.firstUrl(n.body) ? App.el("span", { class: "link-badge", html: App.icon("link", 12) }) : null,
                 n.body,
               ]),
+              n.photos && n.photos.length
+                ? App.el("img", { src: n.photos[0].url, alt: "", class: "note-card__thumb" })
+                : null,
             ])
           );
         });

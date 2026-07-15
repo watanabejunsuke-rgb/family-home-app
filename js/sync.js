@@ -13,7 +13,7 @@ window.App = window.App || {};
 
 (function () {
   const cfg = () => window.APP_CONFIG || {};
-  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "plants", "notes"];
+  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes"];
 
   App.sync = {
     _timer: null,
@@ -111,14 +111,15 @@ window.App = window.App || {};
       }
     },
 
-    // 植物の写真をアップロード(base64→Driveに保存)。戻り値: {id, url}
-    // 世帯共有データそのものではない(URLだけを後でplant.photosに保存する)ので、
+    // 写真をアップロード(base64→Driveに保存)。戻り値: {id, url}
+    // 植物・日記など複数の画面から使う汎用処理(GAS側のアクション名は初期実装時のまま)。
+    // 世帯共有データそのものではない(URLだけを後で各データのphotosに保存する)ので、
     // enabled()判定はここでは行わず呼び出し側(画面)が確認する
-    async uploadPlantPhoto(plantId, dataBase64, mimeType, filename) {
-      const r = await this.call("uploadPlantPhoto", { plantId, dataBase64, mimeType, filename });
+    async uploadPhoto(entityId, dataBase64, mimeType, filename) {
+      const r = await this.call("uploadPlantPhoto", { plantId: entityId, dataBase64, mimeType, filename });
       return { id: r.id, url: r.url };
     },
-    async deletePlantPhoto(fileId) {
+    async deletePhoto(fileId) {
       await this.call("deletePlantPhoto", { fileId });
     },
 

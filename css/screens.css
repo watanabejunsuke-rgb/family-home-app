@@ -492,6 +492,14 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.note-card__thumb {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  margin-top: var(--spacing-3);
+}
 
 /* ---- メモ:付箋ボード(タイトル主役・日付は控えめ) ---- */
 .note-board {

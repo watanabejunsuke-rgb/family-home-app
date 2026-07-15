@@ -194,7 +194,7 @@ App.screens = App.screens || {};
     App.refresh();
     try {
       const base64 = await App.compressImageFile(file);
-      const { id, url } = await App.sync.uploadPlantPhoto(plant.id, base64, "image/jpeg", plant.id);
+      const { id, url } = await App.sync.uploadPhoto(plant.id, base64, "image/jpeg", plant.id);
       App.store.update((st) => {
         const p = st.plants.find((x) => x.id === plant.id);
         if (!p) return;
@@ -227,7 +227,7 @@ App.screens = App.screens || {};
         const p = st.plants.find((x) => x.id === plant.id);
         if (p) p.photos = photosOf(p).filter((ph) => ph.id !== photo.id);
       });
-      App.sync.deletePlantPhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+      App.sync.deletePhoto(photo.id).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
       App.toast("写真を削除しました", "trash");
     });
   }
