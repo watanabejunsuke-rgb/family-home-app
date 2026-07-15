@@ -306,6 +306,7 @@ function completeTaskViaLine(userId, taskId) {
     if (!t) return '見つかりませんでした(既に対応済みかもしれません)';
     if (t.done) return '「' + t.title + '」は既に完了しています';
     t.done = true;
+    t.doneAt = todayStrJST();
     return '「' + t.title + '」を完了にしました';
   });
 }

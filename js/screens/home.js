@@ -178,7 +178,10 @@ App.screens.home = {
             onToggle: (task) => {
               App.store.update((s) => {
                 const x = s.tasks.find((k) => k.id === task.id);
-                if (x) x.done = !x.done;
+                if (!x) return;
+                x.done = !x.done;
+                if (x.done) x.doneAt = App.date.today();
+                else delete x.doneAt;
               });
               const x = App.store.state.tasks.find((k) => k.id === t.id);
               if (x && x.done) App.toast("おつかれさま!1件完了しました");
@@ -187,6 +190,30 @@ App.screens.home = {
         );
       });
       taskCard.appendChild(ul);
+    }
+    // きょうやったこと — LINEのボタン操作でも完了できるため、アプリを開いたときに
+    // 「今日やること」からいつの間にか消えていて不安、とならないよう完了の記録を見せる
+    const doneToday = App.data.doneToday();
+    if (doneToday.length > 0) {
+      const doneBox = App.el("div", {
+        style: "border-top: 1px solid var(--color-divider); margin-top: var(--spacing-2); padding-top: var(--spacing-2);",
+      }, [
+        App.el("p", {
+          style: "font-size: var(--text-sub); font-weight: 600; color: var(--color-text-muted); margin-bottom: var(--spacing-1);",
+          text: `きょうやったこと(${doneToday.length})`,
+        }),
+      ]);
+      doneToday.forEach((d) => {
+        doneBox.appendChild(
+          App.el("p", {
+            style: "font-size: var(--text-sub); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--spacing-1); margin: 2px 0;",
+          }, [
+            App.el("span", { style: "color: var(--color-primary); display: inline-flex;", html: App.icon("check", 14) }),
+            App.el("span", { text: d.title }),
+          ])
+        );
+      });
+      taskCard.appendChild(doneBox);
     }
     // 買い物リストは「今日やること」の中の箱として置く(品目はホームを埋めない)
     const shoppingOpen = st.shopping.filter((s) => !s.done);

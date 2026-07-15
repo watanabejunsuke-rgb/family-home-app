@@ -89,7 +89,10 @@ App.screens = App.screens || {};
   function toggleTask(task) {
     App.store.update((st) => {
       const t = st.tasks.find((x) => x.id === task.id);
-      if (t) t.done = !t.done;
+      if (!t) return;
+      t.done = !t.done;
+      if (t.done) t.doneAt = App.date.today();
+      else delete t.doneAt;
     });
     const t = App.store.state.tasks.find((x) => x.id === task.id);
     if (t && t.done) App.toast("おつかれさま!1件完了しました");

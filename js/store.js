@@ -249,6 +249,24 @@ window.App = window.App || {};
       return items;
     },
 
+    // 「きょうやったこと」— やること・植物のお世話のうち、今日完了したものを一覧にする。
+    // LINEのボタン操作でも完了できるようになったため、アプリを開いたときに「今日やること」
+    // からいつの間にか消えていて不安、とならないよう完了の記録を見せる
+    doneToday() {
+      const t = today();
+      const items = [];
+      store.state.tasks.forEach((x) => {
+        if (x.done && x.doneAt === t) items.push({ title: x.title });
+      });
+      store.state.plants.forEach((p) => {
+        if (p.wateredAt === t) items.push({ title: `「${p.name}」に水やり` });
+        (p.careLog || []).forEach((c) => {
+          if (c.doneAt === t) items.push({ title: `「${p.name}」の${c.label}` });
+        });
+      });
+      return items;
+    },
+
     // 図鑑由来の「今月のお世話ヒント」— うちの植物と図鑑を名前でゆるく突き合わせ、
     // 今月が適期の作業を参考情報として返す。以下は今年すでに対応済みとみなし出さない:
     // ・自分でお手入れ予定(careTasks)を登録済みのラベル
