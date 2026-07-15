@@ -134,6 +134,24 @@ window.App = window.App || {};
       this.save();
       if (App.refresh) App.refresh();
     },
+
+    // サンプルデータを一切残さず、まっさらな空の状態にする(設定・世帯参加はそのまま維持)
+    clear() {
+      Object.assign(this.state, {
+        family: [],
+        events: [],
+        tasks: [],
+        shopping: [],
+        plants: [],
+        notes: [],
+        aiChat: [
+          { role: "ai", text: "こんにちは!家族のこと、家のこと、なんでも気軽に相談してくださいね。", at: Date.now() },
+        ],
+        isMockData: false,
+      });
+      this.save();
+      if (App.refresh) App.refresh();
+    },
   };
 
   App.store = store;

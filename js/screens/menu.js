@@ -399,8 +399,9 @@ App.screens = App.screens || {};
   };
 
   // ============================================
-  // データ管理 — 初期化はここの奥に置く(誤操作防止のため
-  // 「消える内容の確認」→「チェック」→「最終確認」の三段構え)
+  // データ管理 — 破壊的操作はここの奥に置く(誤操作防止のため
+  // 「消える内容の確認」→「チェック」→「最終確認」の三段構え)。
+  // 「空にする」= サンプルデータ無しの実運用開始用、「サンプルデータに戻す」= デモ・動作確認用、の2本立て
   // ============================================
   App.screens.dataManage = {
     title: "データ管理",
@@ -431,6 +432,57 @@ App.screens = App.screens || {};
         App.el("section", { class: "section" }, [
           App.sectionHeader("この端末に保存されているデータ", { icon: "info" }),
           summaryCard,
+        ])
+      );
+
+      // ---- 空にする(サンプルデータを含めてすべて削除し、まっさらな状態にする) ----
+      let agreedClear = false;
+      const clearBtn = App.el("button", {
+        class: "btn-primary",
+        style: "background: var(--color-error); margin-top: var(--spacing-4);",
+        text: "空にして始める",
+        disabled: "",
+      });
+      const clearCheckBox = App.el("span", { class: "confirm-check__box", html: App.icon("check", 14) });
+      const clearCheckRow = App.el("button", {
+        class: "confirm-check",
+        "aria-pressed": "false",
+        onclick: () => {
+          agreedClear = !agreedClear;
+          clearCheckRow.setAttribute("aria-pressed", String(agreedClear));
+          if (agreedClear) clearBtn.removeAttribute("disabled");
+          else clearBtn.setAttribute("disabled", "");
+        },
+      }, [clearCheckBox, App.el("span", { text: "上のデータがすべて消えることを確認しました" })]);
+
+      const sharing = App.sync && App.sync.hasHousehold && App.sync.hasHousehold();
+      clearBtn.addEventListener("click", () => {
+        App.confirm({
+          title: "空にしますか?",
+          message: sharing
+            ? "登録されているものをすべて削除して、サンプルデータの無いまっさらな状態にします。共有中のため、家族の端末からも同じデータが消えます。この操作は取り消せません。"
+            : "登録されているものをすべて削除して、サンプルデータの無いまっさらな状態にします。この操作は取り消せません。",
+          okLabel: "空にする",
+          danger: true,
+          onOk: () => {
+            App.store.clear();
+            App.toast("空にしました");
+            App.go("home");
+          },
+        });
+      });
+
+      container.appendChild(
+        App.el("section", { class: "section" }, [
+          App.sectionHeader("空にする", { icon: "trash" }),
+          App.el("div", { class: "card card--lg" }, [
+            App.el("p", {
+              style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-bottom: var(--spacing-3);",
+              text: "サンプルデータを含め、登録されているものをすべて削除して、実際の内容だけをまっさらな状態から入力し直せます。",
+            }),
+            clearCheckRow,
+            clearBtn,
+          ]),
         ])
       );
 
@@ -470,11 +522,11 @@ App.screens = App.screens || {};
 
       container.appendChild(
         App.el("section", { class: "section" }, [
-          App.sectionHeader("初期化", { icon: "trash" }),
+          App.sectionHeader("サンプルデータに戻す", { icon: "info" }),
           App.el("div", { class: "card card--lg" }, [
             App.el("p", {
               style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-bottom: var(--spacing-3);",
-              text: "登録した予定・やること・メモなどをすべて消して、最初のサンプルデータに戻します。普段の利用でこの操作が必要になることはありません。",
+              text: "登録した予定・やること・メモなどをすべて消して、最初のお試し用サンプルデータに戻します。人に見せる時や動作確認に使う操作で、普段の利用では上の「空にする」で十分です。",
             }),
             checkRow,
             resetBtn,
