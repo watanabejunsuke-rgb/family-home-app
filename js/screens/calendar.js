@@ -522,6 +522,10 @@ App.screens = App.screens || {};
             class: "schedule-item__dot" + (isAway ? " schedule-item__dot--away" : ""),
             style: `color: ${App.paletteColor(ev.color || 0).fg};`,
           });
+          const resultInfo = ev.kind === "match" && ev.result && App.MATCH_RESULT_BADGE[ev.result];
+          const resultBadge = resultInfo
+            ? App.el("span", { class: `badge ${resultInfo.cls}`, text: resultInfo.text })
+            : null;
           // 複数日にまたがる予定は、時刻の代わりに期間(8/10〜8/18)を表示して
           // 「この日だけの予定ではない」ことが分かるようにする
           const timeLabel = ev.endDate ? `${App.fmtDateShort(ev.date)}〜${App.fmtDateShort(ev.endDate)}` : (ev.time || "終日");
@@ -535,6 +539,7 @@ App.screens = App.screens || {};
               dot,
               App.el("span", { class: "schedule-item__time", text: timeLabel }),
               titleWrap,
+              resultBadge,
               avatars,
             ])
           );

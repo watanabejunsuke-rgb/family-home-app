@@ -22,6 +22,18 @@ App.screens = App.screens || {};
     });
   }
 
+  // 勝敗(結果)。J.League公式サイトの直接スクレイピングは規約上グレーな面があり見送り、
+  // 安全な「試合が終わったらワンタップで手動記録」方式にした
+  const RESULT_OPTIONS = [
+    { value: "", label: "未定" },
+    { value: "win", label: "勝ち" },
+    { value: "loss", label: "負け" },
+    { value: "draw", label: "引き分け" },
+  ];
+  // カレンダー画面でも同じ表示に使うため共有(js/screens/calendar.jsから参照)
+  const RESULT_BADGE = { win: { text: "○勝ち", cls: "badge--success" }, loss: { text: "●負け", cls: "badge--warning" }, draw: { text: "△引き分け", cls: "badge--muted" } };
+  App.MATCH_RESULT_BADGE = RESULT_BADGE;
+
   // 試合1件の追加・編集シート(実際の日程を手入力で登録)
   function openMatchSheet(team, match) {
     const isEdit = !!match;
@@ -35,14 +47,19 @@ App.screens = App.screens || {};
       venue,
       (v) => (venue = v)
     );
+    let result = isEdit ? match.result || "" : "";
+    const resultChips = App.chipSelect(RESULT_OPTIONS, result, (v) => (result = v));
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "試合を追加" });
     const content = [
       App.field("対戦相手", opponentInput),
       App.field("日付", dateInput),
       timeField,
       App.el("div", { class: "field" }, [App.el("span", { class: "field__label", text: "ホーム/アウェイ" }), venueChips]),
-      saveBtn,
     ];
+    if (isEdit) {
+      content.push(App.el("div", { class: "field" }, [App.el("span", { class: "field__label", text: "勝敗(試合後に記録)" }), resultChips]));
+    }
+    content.push(saveBtn);
     if (isEdit) {
       const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>この試合を削除</span>" });
       del.addEventListener("click", () => {
@@ -70,7 +87,7 @@ App.screens = App.screens || {};
       App.store.update((st2) => {
         if (isEdit) {
           const e = st2.events.find((x) => x.id === match.id);
-          if (e) Object.assign(e, { title, date: dateInput.value, time, opponent, venue, kind: "match", color });
+          if (e) Object.assign(e, { title, date: dateInput.value, time, opponent, venue, kind: "match", color, result: result || undefined });
         } else {
           st2.events.push({
             id: App.uid(), title, date: dateInput.value, time, opponent, venue, color,
@@ -147,6 +164,9 @@ App.screens = App.screens || {};
           }, [
             App.el("span", { class: "schedule-item__time", text: App.fmtDate(m.date, { weekday: false }) }),
             App.el("span", { class: "schedule-item__title", text: m.title.replace(/^⚽\s*/, "") }),
+            m.result && RESULT_BADGE[m.result]
+              ? App.el("span", { class: `badge ${RESULT_BADGE[m.result].cls}`, text: RESULT_BADGE[m.result].text })
+              : null,
           ])
         );
       });

@@ -15,6 +15,11 @@
 //   LINE_LOGIN_CHANNEL_ID    … LIFF(LINEログイン)チャネルのチャネルID(IDトークン検証用)
 //   MESSAGING_CHANNEL_TOKEN … LINE公式アカウント(Messaging APIチャネル)のチャネルアクセストークン
 //                              (毎朝のプッシュ通知に使用。未設定ならsendDailyDigestは何もしない)
+//   WEBHOOK_TOKEN            … LINEからの「完了にする」ボタン(postback)を受け取るための合言葉。
+//                              GASのdoPost(e)はHTTPヘッダーを読めない仕様のため、LINEの署名検証の
+//                              代わりに「Webhook URLの末尾に付けるクエリ文字列」で正当性を確認する。
+//                              適当な英数字の長い文字列を決めてここに設定し、LINE Developersの
+//                              Webhook URL欄には「(このGASのURL)?webhookToken=(同じ文字列)」を登録すること。
 //
 // デプロイ: ウェブアプリ / 実行するユーザー=自分 / アクセスできるユーザー=全員
 // セットアップ手順は backend/README.md を参照。
@@ -34,8 +39,12 @@ function doGet() {
 }
 
 function doPost(e) {
+  // LINEのWebhook(postbackボタン操作等)は、アプリ自身のAPI呼び出しと形が違う
+  // ({events:[...]}を持つ・idTokenを持たない)ので、先にそちらを判定して分岐する
+  var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  if (body.events) return handleLineWebhook(e, body);
+
   try {
-    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var userId = verifyIdToken(body.idToken); // 不正なら例外
     var action = body.action;
     var result;
@@ -229,6 +238,115 @@ function setNotifPrefs(userId, prefs) {
 }
 
 // ============================================
+// LINE Webhook — 毎朝のダイジェストに付けた「完了」ボタン(postback)の受け口。
+// GASのdoPost(e)はHTTPヘッダーを読めないため、LINEの署名検証の代わりに
+// クエリ文字列のWEBHOOK_TOKENで正当性を確認する(ヘッダーが使えない制約への対処)。
+// ============================================
+function handleLineWebhook(e, body) {
+  var expected = PROP.getProperty('WEBHOOK_TOKEN');
+  if (!expected || !e.parameter || e.parameter.webhookToken !== expected) {
+    // ここでエラーを投げるとLINE側にリトライされ続けるので、静かに200を返す
+    Logger.log('webhook token mismatch');
+    return json({ ok: true });
+  }
+  (body.events || []).forEach(function (ev) {
+    try { handleLineEvent(ev); } catch (err) { Logger.log('line event failed: ' + err); }
+  });
+  return json({ ok: true });
+}
+
+function handleLineEvent(ev) {
+  if (ev.type !== 'postback') return; // テキストメッセージ等には反応しない(通知専用ボットのため)
+  var userId = ev.source && ev.source.userId;
+  if (!userId) return;
+  var data = parsePostbackData(ev.postback && ev.postback.data);
+  var msg = null;
+  if (data.type === 'task') msg = completeTaskViaLine(userId, data.id);
+  else if (data.type === 'water') msg = completePlantWaterViaLine(userId, data.id);
+  else if (data.type === 'care') msg = completePlantCareViaLine(userId, data.id, data.cid);
+  if (msg && ev.replyToken) {
+    var token = PROP.getProperty('MESSAGING_CHANNEL_TOKEN');
+    if (token) replyLineText(ev.replyToken, msg, token);
+  }
+}
+
+// "type=task&id=xxxx" 形式のクエリ文字列をパースする(postback.dataの制約上、
+// JSONではなくクエリ文字列形式にしている)
+function parsePostbackData(str) {
+  var out = {};
+  (str || '').split('&').forEach(function (kv) {
+    var idx = kv.indexOf('=');
+    if (idx < 0) return;
+    out[decodeURIComponent(kv.slice(0, idx))] = decodeURIComponent(kv.slice(idx + 1));
+  });
+  return out;
+}
+
+// 世帯データ(households.data)を直接読み書きする共通処理。
+// pull/pushはフロントの操作を前提にした形なので、Webhookからの直接更新用に別関数にする
+function withHouseholdData(userId, fn) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sh = sheet();
+    var target = findByUser(readAll(sh), userId);
+    if (!target || !target.data) return null;
+    var msg = fn(target.data);
+    if (msg) sh.getRange(target.row, 4, 1, 2).setValues([[JSON.stringify(target.data), Date.now()]]);
+    return msg;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function completeTaskViaLine(userId, taskId) {
+  return withHouseholdData(userId, function (data) {
+    var t = (data.tasks || []).filter(function (x) { return x.id === taskId; })[0];
+    if (!t) return '見つかりませんでした(既に対応済みかもしれません)';
+    if (t.done) return '「' + t.title + '」は既に完了しています';
+    t.done = true;
+    return '「' + t.title + '」を完了にしました';
+  });
+}
+
+function completePlantWaterViaLine(userId, plantId) {
+  return withHouseholdData(userId, function (data) {
+    var p = (data.plants || []).filter(function (x) { return x.id === plantId; })[0];
+    if (!p) return '見つかりませんでした(既に対応済みかもしれません)';
+    p.wateredAt = todayStrJST();
+    return '「' + p.name + '」に水やりしました';
+  });
+}
+
+function completePlantCareViaLine(userId, plantId, careId) {
+  return withHouseholdData(userId, function (data) {
+    var p = (data.plants || []).filter(function (x) { return x.id === plantId; })[0];
+    if (!p) return '見つかりませんでした(既に対応済みかもしれません)';
+    var care = (p.careTasks || []).filter(function (c) { return c.id === careId; })[0];
+    if (!care) return '「' + p.name + '」は既に対応済みかもしれません';
+    p.careTasks = (p.careTasks || []).filter(function (c) { return c.id !== careId; });
+    if (!p.careLog) p.careLog = [];
+    p.careLog.push({ label: care.label, doneAt: todayStrJST() });
+    return '「' + p.name + '」の' + care.label + 'を完了にしました';
+  });
+}
+
+// LINE Messaging APIで返信(reply)する。push(sendLinePush)と違い replyToken は
+// そのイベント1回限りでしか使えない
+function replyLineText(replyToken, text, token) {
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ replyToken: replyToken, messages: [{ type: 'text', text: text }] }),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    Logger.log('LINE reply error: ' + res.getResponseCode() + ' ' + res.getContentText());
+  }
+}
+
+// ============================================
 // 植物の写真登録 — Googleドライブに保存し、URLだけをフロントのplant.photosに持たせる
 // (base64のまま同期データに入れるとスプレッドシートの1セル5万文字上限に即当たるため)
 // 初回実行時にDriveの認可(スコープ追加)を求められることがある。求められたら許可すること。
@@ -346,6 +464,60 @@ function whoSuffix(e, family) {
   return names.length ? names.join('・') : null;
 }
 
+// ============================================
+// 天気ひとこと — 気象庁(JMA)の公式API(無料・キー不要)から、印西市が属する
+// 「千葉県北西部」(area code 120010)の今日の降水確率を取ってきて一言にする。
+// 失敗しても(通信エラー・JMA側の構造変更等)nullを返すだけで、ダイジェスト自体は動く。
+// ============================================
+function fetchWeatherOneLiner() {
+  try {
+    var res = UrlFetchApp.fetch('https://www.jma.go.jp/bosai/forecast/data/forecast/120000.json', { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return null;
+    var report = JSON.parse(res.getContentText())[0]; // [0]=直近の詳細レポート
+    var popSeries = report.timeSeries[1]; // 6時間ごとの降水確率
+    var areaIdx = -1;
+    for (var i = 0; i < popSeries.areas.length; i++) {
+      if (popSeries.areas[i].area.code === '120010') { areaIdx = i; break; } // 千葉県北西部(印西市を含む)
+    }
+    if (areaIdx < 0) return null;
+    var pops = popSeries.areas[areaIdx].pops;
+    var timeDefines = popSeries.timeDefines;
+    var todayStr = todayStrJST();
+    var maxPop = 0;
+    for (var j = 0; j < timeDefines.length; j++) {
+      var d = Utilities.formatDate(new Date(timeDefines[j]), 'Asia/Tokyo', 'yyyy-MM-dd');
+      if (d === todayStr) maxPop = Math.max(maxPop, Number(pops[j]) || 0);
+    }
+    var text;
+    if (maxPop >= 60) text = '☔ 傘を持って出かけると安心です(降水確率' + maxPop + '%)';
+    else if (maxPop >= 30) text = '🌂 折りたたみ傘があると安心かも(降水確率' + maxPop + '%)';
+    else text = '☀️ 傘は無くても大丈夫そうです(降水確率' + maxPop + '%)';
+    return { text: text, date: todayStr };
+  } catch (e) {
+    Logger.log('weather fetch failed: ' + e);
+    return null;
+  }
+}
+
+// 世帯データに天気を書き込む(毎朝1回。フロントはsync pull経由でweatherを受け取る)
+function updateHouseholdWeather(householdId, weather) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sh = sheet();
+    var target = null;
+    var rows = readAll(sh);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].householdId === householdId) { target = rows[i]; break; }
+    }
+    if (!target || !target.data) return;
+    target.data.weather = weather;
+    sh.getRange(target.row, 4, 1, 2).setValues([[JSON.stringify(target.data), Date.now()]]);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 世帯1件分のデータから、あるメンバー向けの今日のダイジェスト文面を組み立てる
 // (何も無ければnull)。prefsは受信者本人のsettings.notifPrefs相当
 // (js/store.jsのnotifications()と同じ判定基準)
@@ -401,6 +573,125 @@ function buildDigestText(data, todayStr, tomorrowStr, prefs) {
   return 'おはようございます。今日の暮らしnoteです。\n\n' + sections.join('\n\n') + '\n\n▶ アプリを開く\n' + LIFF_URL;
 }
 
+// postbackのdata文字列を組み立てる("type=task&id=xxxx"形式。JSONではなくクエリ文字列)
+function buildPostbackData(action) {
+  var parts = ['type=' + encodeURIComponent(action.type), 'id=' + encodeURIComponent(action.id)];
+  if (action.cid) parts.push('cid=' + encodeURIComponent(action.cid));
+  return parts.join('&');
+}
+
+// buildDigestTextと同じ内容を、LINEから直接「完了」を押せるFlex Message(カード形式)で組み立てる。
+// やること・植物のお世話には完了ボタンを付け、予定・試合は情報表示のみ(操作不要なため)
+function buildDigestFlex(data, todayStr, tomorrowStr, prefs, weather) {
+  prefs = prefs || {};
+  var on = function (cat) { return prefs[cat] !== false; };
+  var sections = []; // [{icon, label, rows:[{text, action|null}]}]
+
+  var taskRows = [];
+  if (on('task')) {
+    (data.tasks || [])
+      .filter(function (x) { return !x.done && x.due && x.due <= todayStr; })
+      .sort(function (a, b) { return (a.due || '').localeCompare(b.due || ''); })
+      .forEach(function (x) {
+        var meta = x.due < todayStr ? ('期限切れ・' + fmtDateJP(x.due)) : '今日まで';
+        taskRows.push({ text: x.title + '(' + meta + ')', action: { type: 'task', id: x.id } });
+      });
+  }
+  if (taskRows.length) sections.push({ icon: '📋', label: 'やること', rows: taskRows });
+
+  var eventRows = [];
+  var matchRows = [];
+  (data.events || [])
+    .filter(function (e) { return eventCoversDate(e, todayStr); })
+    .sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); })
+    .forEach(function (e) {
+      var isMatch = e.kind === 'match';
+      if (isMatch ? !on('match') : !on('event')) return;
+      var title = e.title.replace(/^⚽\s*/, '');
+      var who = whoSuffix(e, data.family);
+      var meta = '今日 ' + (e.time || '終日') + (who ? '・' + who : '');
+      (isMatch ? matchRows : eventRows).push({ text: title + '(' + meta + ')', action: null });
+    });
+  if (eventRows.length) sections.push({ icon: '📅', label: '予定', rows: eventRows });
+
+  var plantRows = [];
+  if (on('plant')) {
+    (data.plants || []).forEach(function (p) {
+      var left = plantDaysLeftJST(p, todayStr);
+      if (left <= 0) {
+        plantRows.push({
+          text: '「' + p.name + '」に水やり(' + (left === 0 ? '今日が目安日です' : ('目安日から' + (-left) + '日')) + ')',
+          action: { type: 'water', id: p.id },
+        });
+      }
+      (p.careTasks || []).forEach(function (c) {
+        var started = c.mode === 'range' ? c.startDate <= todayStr : c.date <= todayStr;
+        if (!started) return;
+        var meta;
+        if (c.mode === 'range') {
+          meta = todayStr <= c.endDate ? ('いま適期・' + fmtShortJP(c.startDate) + '〜' + fmtShortJP(c.endDate)) : ('適期すぎ・〜' + fmtShortJP(c.endDate));
+        } else {
+          meta = c.date === todayStr ? '今日が予定日です' : ('予定日すぎ・' + fmtShortJP(c.date));
+        }
+        plantRows.push({ text: '「' + p.name + '」の' + c.label + '(' + meta + ')', action: { type: 'care', id: p.id, cid: c.id } });
+      });
+    });
+  }
+  if (plantRows.length) sections.push({ icon: '🌱', label: '植物', rows: plantRows });
+
+  if (on('match')) {
+    (data.events || [])
+      .filter(function (e) { return e.kind === 'match' && e.date === tomorrowStr; })
+      .forEach(function (e) {
+        var title = e.title.replace(/^⚽\s*/, '');
+        var who = whoSuffix(e, data.family);
+        matchRows.push({ text: title + '(明日 ' + (e.time || '') + (who ? '・' + who : '') + ')', action: null });
+      });
+  }
+  if (matchRows.length) sections.push({ icon: '⚽', label: '試合', rows: matchRows });
+
+  if (!sections.length && !weather) return null;
+
+  var bodyContents = [];
+  if (weather && weather.text) {
+    bodyContents.push({ type: 'text', text: weather.text, size: 'sm', wrap: true, color: '#5E7B71' });
+  }
+  sections.forEach(function (sec, i) {
+    if (bodyContents.length) bodyContents.push({ type: 'separator', margin: 'lg' });
+    bodyContents.push({ type: 'text', text: sec.icon + ' ' + sec.label, weight: 'bold', size: 'sm', margin: bodyContents.length ? 'lg' : 'none' });
+    sec.rows.forEach(function (r) {
+      if (r.action) {
+        bodyContents.push({
+          type: 'box', layout: 'horizontal', margin: 'sm', alignItems: 'center',
+          contents: [
+            { type: 'text', text: r.text, size: 'sm', wrap: true, flex: 5 },
+            { type: 'button', style: 'primary', color: '#5E7B71', height: 'sm', flex: 2,
+              action: { type: 'postback', label: '完了', data: buildPostbackData(r.action), displayText: '完了にしました' } },
+          ],
+        });
+      } else {
+        bodyContents.push({ type: 'text', text: r.text, size: 'sm', wrap: true, margin: 'sm' });
+      }
+    });
+  });
+
+  return {
+    type: 'bubble',
+    header: {
+      type: 'box', layout: 'vertical',
+      contents: [
+        { type: 'text', text: 'おはようございます', weight: 'bold', size: 'md' },
+        { type: 'text', text: '今日の暮らしnoteです', size: 'xs', color: '#9A9A96' },
+      ],
+    },
+    body: { type: 'box', layout: 'vertical', contents: bodyContents },
+    footer: {
+      type: 'box', layout: 'vertical',
+      contents: [{ type: 'button', style: 'link', height: 'sm', action: { type: 'uri', label: 'アプリを開く', uri: LIFF_URL } }],
+    },
+  };
+}
+
 // LINE Messaging APIでテキストをpush送信
 function sendLinePush(userId, text, token) {
   var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
@@ -415,22 +706,38 @@ function sendLinePush(userId, text, token) {
   }
 }
 
-// 時間主導トリガーの実行対象。全世帯を見て、今日ダイジェストがある世帯だけ
-// メンバーごとに、本人の通知設定(memberPrefs)に応じた内容をpush送信する
-// (世帯共通ではなく、受信者ごとに文面が変わりうる。何も無ければ送らない)
+// LINE Messaging APIでFlex Message(カード+ボタン)をpush送信。altTextは通知プレビュー用の代替文
+function sendLineFlex(userId, altText, flex, token) {
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ to: userId, messages: [{ type: 'flex', altText: altText, contents: flex }] }),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    Logger.log('LINE flex push error (' + userId + '): ' + res.getResponseCode() + ' ' + res.getContentText());
+  }
+}
+
+// 時間主導トリガーの実行対象。全世帯を見て、天気を書き込み(通知トークン未設定でもここは行う)、
+// 今日ダイジェストがある世帯だけメンバーごとに、本人の通知設定(memberPrefs)に応じた
+// Flex Message(「完了」ボタン付き)を送る(世帯共通ではなく受信者ごとに文面が変わりうる)
 function sendDailyDigest() {
   var token = PROP.getProperty('MESSAGING_CHANNEL_TOKEN');
-  if (!token) { Logger.log('MESSAGING_CHANNEL_TOKEN 未設定のため送信をスキップしました'); return; }
   var todayStr = todayStrJST();
   var tomorrowStr = tomorrowStrJST();
+  var weather = fetchWeatherOneLiner(); // 取得できなければnull(ダイジェスト自体は止めない)
   var rows = readAll(sheet());
   rows.forEach(function (r) {
     if (!r.data || !r.members || !r.members.length) return;
+    if (weather) updateHouseholdWeather(r.householdId, weather);
+    if (!token) return; // MESSAGING_CHANNEL_TOKEN未設定なら天気の書き込みだけ行いプッシュはしない
     r.members.forEach(function (userId) {
       var prefs = (r.memberPrefs && r.memberPrefs[userId]) || {};
-      var text = buildDigestText(r.data, todayStr, tomorrowStr, prefs);
-      if (!text) return;
-      try { sendLinePush(userId, text, token); }
+      var flex = buildDigestFlex(r.data, todayStr, tomorrowStr, prefs, weather);
+      if (!flex) return;
+      try { sendLineFlex(userId, 'おはようございます。今日の暮らしnoteです。', flex, token); }
       catch (e) { Logger.log('push failed for ' + userId + ': ' + e); }
     });
   });

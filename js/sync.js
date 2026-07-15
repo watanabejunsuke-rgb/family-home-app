@@ -13,7 +13,7 @@ window.App = window.App || {};
 
 (function () {
   const cfg = () => window.APP_CONFIG || {};
-  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes"];
+  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes", "weather"];
 
   App.sync = {
     _timer: null,
@@ -182,7 +182,9 @@ window.App = window.App || {};
     },
     _merge(data) {
       App.store.update((st) => {
-        SHARED_KEYS.forEach((k) => { if (Array.isArray(data[k])) st[k] = data[k]; });
+        // 配列(family/events等)だけでなく、weatherのようなオブジェクトの共有キーも
+        // 取りこぼさないよう、値がある(undefinedでない)キーはすべて取り込む
+        SHARED_KEYS.forEach((k) => { if (data[k] !== undefined) st[k] = data[k]; });
         if (data.settings && data.settings.favoriteTeam !== undefined) {
           st.settings.favoriteTeam = data.settings.favoriteTeam;
         }

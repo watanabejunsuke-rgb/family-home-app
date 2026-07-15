@@ -45,6 +45,17 @@ App.screens.home = {
   render(container) {
     const st = App.store.state;
 
+    // ---- 天気ひとこと(毎朝GASが気象庁のデータから書き込む。今日の分が無ければ何も出さない) ----
+    if (st.weather && st.weather.date === App.date.today() && st.weather.text) {
+      container.appendChild(
+        App.el("p", {
+          class: "section",
+          style: "font-size: var(--text-sub); color: var(--color-primary); margin-top: var(--spacing-2); margin-bottom: 0; font-weight: 600;",
+          text: st.weather.text,
+        })
+      );
+    }
+
     // ---- はじめに(初回だけの案内カード。閉じると二度と出ない)。
     // 色つき背景+アイコン+大きめの見出しで、他の白いカードに埋もれず目立つようにする ----
     if (!st.settings.introDismissed) {
