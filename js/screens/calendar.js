@@ -452,10 +452,11 @@ App.screens = App.screens || {};
           );
         });
 
-        // 継ぎ目側のセルパディングを0にして隣のセルとの隙間を詰める
+        // 継ぎ目側のセルパディング・透明ボーダーを0にして隣のセルとの隙間を詰める
+        // (border:1.5px solid transparentも、色は見えないが幅の分だけ隙間を作っていた)
         let cellStyle = "";
-        if (bridgesLeft) cellStyle += "padding-left: 0;";
-        if (bridgesRight) cellStyle += "padding-right: 0;";
+        if (bridgesLeft) cellStyle += "padding-left: 0; border-left-width: 0;";
+        if (bridgesRight) cellStyle += "padding-right: 0; border-right-width: 0;";
 
         const cell = App.el("button", {
           class: "cal-day" + (inMonth ? "" : " cal-day--other") + (ds === today ? " cal-day--today" : "") + weekendClass,
