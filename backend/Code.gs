@@ -1,12 +1,15 @@
 // ============================================
 // 暮らしnote — バックエンド(Google Apps Script)
-// 世帯データ同期。フロントの store.load()/save() から呼ばれる。
+// 世帯データ同期 + 毎朝のLINEプッシュ通知(ダイジェスト)。
+// 同期はフロントの store.load()/save() から呼ばれる。プッシュは時間主導
+// トリガー(sendDailyDigest)から呼ばれる。
 //
 // 秘密情報はここ(スクリプトプロパティ)にだけ置く。フロント(公開リポジトリ)には置かない。
 // 必要なスクリプトプロパティ:
-//   SHEET_ID               … データを保存するスプレッドシートのID
-//   LINE_LOGIN_CHANNEL_ID  … LIFF(LINEログイン)チャネルのチャネルID(IDトークン検証用)
-// (プッシュ通知を足すときに MESSAGING_CHANNEL_TOKEN を追加する)
+//   SHEET_ID                 … データを保存するスプレッドシートのID
+//   LINE_LOGIN_CHANNEL_ID    … LIFF(LINEログイン)チャネルのチャネルID(IDトークン検証用)
+//   MESSAGING_CHANNEL_TOKEN … LINE公式アカウント(Messaging APIチャネル)のチャネルアクセストークン
+//                              (毎朝のプッシュ通知に使用。未設定ならsendDailyDigestは何もしない)
 //
 // デプロイ: ウェブアプリ / 実行するユーザー=自分 / アクセスできるユーザー=全員
 // セットアップ手順は backend/README.md を参照。
@@ -190,4 +193,150 @@ function leaveHousehold(userId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ============================================
+// 毎朝のLINEプッシュ通知(ダイジェスト)
+// フロントの App.data.notifications()(js/store.js)と同じ判定基準を
+// サーバー側に移植したもの。算出仕様が食い違わないよう、変更する場合は
+// 両方に反映すること。
+// ============================================
+
+// ---- 日付ユーティリティ(Asia/Tokyo基準。GASプロジェクトのタイムゾーン設定に依存しない) ----
+function todayStrJST() { return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'); }
+function tomorrowStrJST() { return Utilities.formatDate(new Date(Date.now() + 86400000), 'Asia/Tokyo', 'yyyy-MM-dd'); }
+function fmtDateJP(dateStr) {
+  var d = new Date(dateStr + 'T00:00:00');
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日';
+}
+function fmtShortJP(dateStr) {
+  var d = new Date(dateStr + 'T00:00:00');
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+// 予定がdateStrを含むか(endDateがあれば期間、無ければ単日)。js/store.jsのeventCoversDateと同一仕様
+function eventCoversDate(e, dateStr) {
+  return e.endDate ? (e.date <= dateStr && dateStr <= e.endDate) : e.date === dateStr;
+}
+// 水やり残日数(0以下=そろそろ)。js/store.jsのApp.plantDaysLeftと同一仕様
+function plantDaysLeftJST(p, todayStr) {
+  var watered = new Date(p.wateredAt + 'T00:00:00');
+  var next = new Date(watered);
+  next.setDate(next.getDate() + p.cycleDays);
+  var now = new Date(todayStr + 'T00:00:00');
+  return Math.round((next - now) / 86400000);
+}
+// 植物由来の項目(水やり期限・お手入れ適期)。js/store.jsのplantCareItemsと同一仕様
+function plantCareItemsJST(plants, todayStr) {
+  var items = [];
+  (plants || []).forEach(function (p) {
+    var left = plantDaysLeftJST(p, todayStr);
+    if (left <= 0) {
+      items.push({
+        title: '「' + p.name + '」に水やり',
+        meta: left === 0 ? '今日が目安日です' : ('目安日から' + (-left) + '日たっています'),
+      });
+    }
+    (p.careTasks || []).forEach(function (c) {
+      var started = c.mode === 'range' ? c.startDate <= todayStr : c.date <= todayStr;
+      if (!started) return;
+      var meta;
+      if (c.mode === 'range') {
+        meta = todayStr <= c.endDate
+          ? ('いま適期(' + fmtShortJP(c.startDate) + '〜' + fmtShortJP(c.endDate) + ')')
+          : ('適期をすぎています(〜' + fmtShortJP(c.endDate) + ')');
+      } else {
+        meta = c.date === todayStr ? '今日が予定日です' : ('予定日をすぎています(' + fmtShortJP(c.date) + ')');
+      }
+      items.push({ title: '「' + p.name + '」の' + c.label, meta: meta });
+    });
+  });
+  return items;
+}
+
+// 世帯1件分のデータから、今日のダイジェスト文面を組み立てる(何も無ければnull)
+function buildDigestText(data, todayStr, tomorrowStr) {
+  var lines = { task: [], event: [], plant: [], match: [] };
+
+  (data.tasks || [])
+    .filter(function (x) { return !x.done && x.due && x.due <= todayStr; })
+    .sort(function (a, b) { return (a.due || '').localeCompare(b.due || ''); })
+    .forEach(function (x) {
+      var meta = x.due < todayStr ? ('期限切れ・' + fmtDateJP(x.due)) : '今日まで';
+      lines.task.push(x.title + '(' + meta + ')');
+    });
+
+  (data.events || [])
+    .filter(function (e) { return eventCoversDate(e, todayStr); })
+    .sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); })
+    .forEach(function (e) {
+      var isMatch = e.kind === 'match';
+      var title = e.title.replace(/^⚽\s*/, '');
+      var meta = '今日 ' + (e.time || '終日');
+      (isMatch ? lines.match : lines.event).push(title + '(' + meta + ')');
+    });
+
+  plantCareItemsJST(data.plants, todayStr).forEach(function (p) {
+    lines.plant.push(p.title + '(' + p.meta + ')');
+  });
+
+  (data.events || [])
+    .filter(function (e) { return e.kind === 'match' && e.date === tomorrowStr; })
+    .forEach(function (e) {
+      var title = e.title.replace(/^⚽\s*/, '');
+      lines.match.push(title + '(明日 ' + (e.time || '') + ')');
+    });
+
+  var sections = [];
+  if (lines.task.length) sections.push('📋 やること\n' + lines.task.map(function (t) { return '・' + t; }).join('\n'));
+  if (lines.event.length) sections.push('📅 予定\n' + lines.event.map(function (t) { return '・' + t; }).join('\n'));
+  if (lines.plant.length) sections.push('🌱 植物\n' + lines.plant.map(function (t) { return '・' + t; }).join('\n'));
+  if (lines.match.length) sections.push('⚽ 試合\n' + lines.match.map(function (t) { return '・' + t; }).join('\n'));
+  if (!sections.length) return null;
+  return 'おはようございます。今日の暮らしnoteです。\n\n' + sections.join('\n\n');
+}
+
+// LINE Messaging APIでテキストをpush送信
+function sendLinePush(userId, text, token) {
+  var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify({ to: userId, messages: [{ type: 'text', text: text }] }),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() !== 200) {
+    Logger.log('LINE push error (' + userId + '): ' + res.getResponseCode() + ' ' + res.getContentText());
+  }
+}
+
+// 時間主導トリガーの実行対象。全世帯を見て、今日ダイジェストがある世帯だけ
+// メンバー全員にpush送信する(何も無い世帯には送らない)
+function sendDailyDigest() {
+  var token = PROP.getProperty('MESSAGING_CHANNEL_TOKEN');
+  if (!token) { Logger.log('MESSAGING_CHANNEL_TOKEN 未設定のため送信をスキップしました'); return; }
+  var todayStr = todayStrJST();
+  var tomorrowStr = tomorrowStrJST();
+  var rows = readAll(sheet());
+  rows.forEach(function (r) {
+    if (!r.data || !r.members || !r.members.length) return;
+    var text = buildDigestText(r.data, todayStr, tomorrowStr);
+    if (!text) return;
+    r.members.forEach(function (userId) {
+      try { sendLinePush(userId, text, token); }
+      catch (e) { Logger.log('push failed for ' + userId + ': ' + e); }
+    });
+  });
+}
+
+// 【セットアップ用】この関数を1回だけ手動実行すると、毎朝7時に
+// sendDailyDigestを呼ぶトリガーが登録される。何度実行しても、先に同じ
+// トリガーがあれば削除してから作り直すので二重登録にはならない。
+// 時刻はGASプロジェクトのタイムゾーン設定に従う(プロジェクトの設定で
+// Asia/Tokyoになっているか確認しておくこと)。
+function createDailyDigestTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendDailyDigest') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendDailyDigest').timeBased().atHour(7).everyDays(1).create();
+  Logger.log('毎朝7時のトリガーを作成しました');
 }
