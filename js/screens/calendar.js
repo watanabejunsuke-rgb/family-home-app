@@ -141,7 +141,7 @@ App.screens = App.screens || {};
       ? { ...ev, memberIds: [...(ev.memberIds || [])] }
       : { title: "", date: view.selected, time: "", memberIds: App.store.state.family.map((m) => m.id) };
 
-    const titleInput = App.el("input", { type: "text", value: data.title, placeholder: "例:はると スイミング" });
+    const titleInput = App.el("input", { type: "text", value: data.title, placeholder: "例:こた めばえ" });
     const dateInput = App.el("input", { type: "date", value: data.date });
     let time = data.time;
     const timeField = App.timeField("時間", time, (v) => (time = v));

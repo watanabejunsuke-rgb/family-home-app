@@ -36,7 +36,7 @@ window.App = window.App || {};
       ],
       events: [
         { id: App.uid(), date: today(), time: "10:00", title: "めい 予防接種(ひまわり小児科)", memberIds: ["f2", "f4"] },
-        { id: App.uid(), date: today(), time: "16:30", title: "はると スイミング", memberIds: ["f3"] },
+        { id: App.uid(), date: today(), time: "16:30", title: "こた めばえ", memberIds: ["f3"] },
         { id: App.uid(), date: daysAhead(1), time: "10:30", title: "家族でおでかけ(ぽかぽか公園)", memberIds: ["f1", "f2", "f3", "f4"] },
         { id: App.uid(), date: daysAhead(3), time: "19:00", title: "ゴミ出し(資源ごみ)", memberIds: ["f1"] },
       ],
