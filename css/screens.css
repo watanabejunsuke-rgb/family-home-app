@@ -161,7 +161,9 @@
   display: grid;
   /* minmax(0, 1fr): 長い予定名でも列がその分だけ広がらないようにする(既定のfrはauto最小幅を持つため) */
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 1px;
+  /* 複数日予定の帯を完全に継ぎ目なしにするため0に(通常の日同士の間隔は
+     各セル自身のpadding/borderでほぼ変わらず保たれる) */
+  gap: 0;
   /* card--lgの余白(20px)だと列が狭くなるため、カレンダー専用に切り詰める */
   padding: var(--spacing-2);
 }
