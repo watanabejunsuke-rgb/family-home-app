@@ -43,11 +43,12 @@ App.screens.home = {
   render(container) {
     const st = App.store.state;
 
-    // ---- はじめに(初回だけの案内カード。閉じると二度と出ない) ----
+    // ---- はじめに(初回だけの案内カード。閉じると二度と出ない)。
+    // 色つき背景+アイコン+大きめの見出しで、他の白いカードに埋もれず目立つようにする ----
     if (!st.settings.introDismissed) {
       container.appendChild(
         App.el("section", { class: "section" }, [
-          App.el("div", { class: "card card--lg", style: "position: relative;" }, [
+          App.el("div", { class: "card card--lg", style: "position: relative; background: var(--color-primary-light);" }, [
             App.el("button", {
               class: "icon-btn",
               style: "position: absolute; top: var(--spacing-2); right: var(--spacing-2);",
@@ -55,9 +56,12 @@ App.screens.home = {
               html: App.icon("x", 18),
               onclick: () => App.store.update((x) => { x.settings.introDismissed = true; }),
             }),
-            App.el("p", { style: "font-weight: 600; margin-bottom: var(--spacing-2); padding-right: 32px;", text: "はじめに" }),
             App.el("p", {
-              style: "font-size: var(--text-sub); color: var(--color-text-secondary); line-height: var(--line-height);",
+              style: "font-size: var(--text-heading); font-weight: 700; color: var(--color-primary-strong); margin-bottom: var(--spacing-2); padding-right: 32px; display: flex; align-items: center; gap: var(--spacing-2);",
+              html: App.icon("sparkle", 20) + "<span>はじめに</span>",
+            }),
+            App.el("p", {
+              style: "font-size: var(--text-body); color: var(--color-text); line-height: var(--line-height);",
               text: "わが家ホームへようこそ。予定・やること・買い物・植物のお世話・メモ日記を、家族みんなで気軽に共有できます。右下の+からいつでも追加でき、変更はもう片方の端末にも自動で届きます。まずは「今日やること」や「買い物リスト」から使ってみてください。",
             }),
           ]),
