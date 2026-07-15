@@ -7,6 +7,7 @@ App.screens = App.screens || {};
 
 (function () {
   let cat = "all"; // 絞り込み中のカテゴリ
+  let pendingOpenId = null; // 他画面から特定の植物ページを開きたいときの予約
 
   const CATS = ["観葉植物", "野菜", "ハーブ", "果物", "花"];
   const DIFF_LABEL = { easy: "そだてやすい", normal: "ふつう", hard: "手ごたえあり" };
@@ -106,11 +107,29 @@ App.screens = App.screens || {};
     const s = App.sheet(p.name, content);
   }
 
+  // 植物の記録画面などから、特定の植物の図鑑ページへ直接遷移する
+  App.openPediaFor = function (pediaId) {
+    const p = App.PLANTPEDIA.find((e) => e.id === pediaId);
+    if (!p) {
+      App.toast("図鑑に該当する情報が見つかりませんでした", "info");
+      return;
+    }
+    pendingOpenId = pediaId;
+    App.go("pedia");
+  };
+
   App.screens.pedia = {
     title: "植物図鑑",
     back: true,
 
     render(container) {
+      // 他画面からの直接遷移予約があれば、詳細シートを開く
+      if (pendingOpenId) {
+        const target = App.PLANTPEDIA.find((e) => e.id === pendingOpenId);
+        pendingOpenId = null;
+        if (target) openPediaSheet(target);
+      }
+
       // 注意書き(データはAI下書きベースの一般的な目安)
       container.appendChild(
         App.el("p", {

@@ -19,6 +19,13 @@ App.screens = App.screens || {};
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
+  // 図鑑データとの名前のゆるい一致(pedia.jsのisOwnedと対になる向き)
+  function matchPedia(p) {
+    return (App.PLANTPEDIA || []).find(
+      (e) => p.name && (p.name.includes(e.name) || e.name.includes(p.name))
+    );
+  }
+
   // お手入れ予定の時期表示とステータス
   function careStatus(t) {
     const today = App.date.today();
@@ -241,6 +248,7 @@ App.screens = App.screens || {};
         const left = App.plantDaysLeft(p);
         const elapsedRatio = Math.min(1, Math.max(0, (p.cycleDays - left) / p.cycleDays));
         const due = left <= 0;
+        const pedia = matchPedia(p);
         const badge = due
           ? App.el("span", { class: "badge badge--warning", text: "そろそろ水やり" })
           : App.el("span", { class: "badge badge--muted", text: `あと${left}日` });
@@ -342,6 +350,14 @@ App.screens = App.screens || {};
                 App.el("p", { class: "plant-card__place", text: `${p.place || "場所未設定"}・${p.cycleDays}日ごと・前回 ${App.fmtDate(p.wateredAt, { weekday: false })}` }),
               ]),
               badge,
+              pedia
+                ? App.el("button", {
+                    class: "icon-btn",
+                    "aria-label": `「${p.name}」を図鑑で見る`,
+                    html: App.icon("note", 18),
+                    onclick: () => App.openPediaFor(pedia.id),
+                  })
+                : null,
               App.el("button", {
                 class: "icon-btn",
                 "aria-label": `「${p.name}」を編集`,
