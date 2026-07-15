@@ -5,8 +5,7 @@ window.App = window.App || {};
 App.screens = App.screens || {};
 
 (function () {
-  // 柏レイソルの試合はチームカラー(黄色系)で表示する。member色1が北欧トーンの
-  // アンバー系で近いため流用(カレンダーの色スウォッチと同じパレット)
+  // 柏レイソルの試合はチームカラー(専用のマスタードイエロー、color:7)で表示する
   const isKashiwaTeam = (name) => (name || "").includes("柏レイソル");
 
   function openNameSheet() {
@@ -113,30 +112,24 @@ App.screens = App.screens || {};
   ];
 
   // 応援チームの試合予定
-  // 正式版ではJリーグ公式日程との自動連携(GAS経由)を予定。
-  // 今はチーム名の保存+試合の手入力(実際の日程)。柏レイソルのみ公式日程の一括登録に対応。
+  // 実運用では柏レイソルしか使わないため、チーム名を自由入力させず固定にする(v0.14.4)。
+  // 正式版ではJリーグ公式日程との自動連携(GAS経由)を予定。今は2026シーズンの
+  // 一括登録+試合の手入力(実際の日程、カップ戦等の追加分)に対応。
+  const TEAM_NAME = "柏レイソル";
+
   function openTeamSheet() {
     const st = App.store.state;
-    const teamInput = App.el("input", { type: "text", value: st.settings.favoriteTeam || "", placeholder: "例:川崎フロンターレ" });
-    const saveBtn = App.el("button", { class: "btn-primary", text: "チームを保存" });
+    const importBtn = App.el("button", {
+      class: "btn-primary",
+      html: App.icon("calendar", 18) + `<span>2026シーズンの日程を登録する(${KASHIWA_2026_FIXTURES.length}試合)</span>`,
+    });
     const addMatchBtn = App.el("button", {
       class: "btn-secondary",
       style: "margin-top: var(--spacing-3);",
-      html: App.icon("plus", 18) + "<span>試合を追加(実際の日程)</span>",
+      html: App.icon("plus", 18) + "<span>試合を1件追加(カップ戦など)</span>",
     });
-    const importBtn = App.el("button", {
-      class: "section-header__action",
-      style: "margin-top: var(--spacing-3);",
-    });
-    const syncImportLabel = () => {
-      importBtn.innerHTML = isKashiwaTeam(teamInput.value)
-        ? App.icon("calendar", 14) + `<span>柏レイソルの2026シーズン日程を登録する(${KASHIWA_2026_FIXTURES.length}試合)</span>`
-        : App.icon("calendar", 14) + "<span>お試し用のサンプル日程を取り込む(3試合)</span>";
-    };
-    teamInput.addEventListener("input", syncImportLabel);
-    syncImportLabel();
 
-    // 登録済みの試合一覧(このチームの kind:"match" イベントを日付順に)
+    // 登録済みの試合一覧(kind:"match" イベントを日付順に)
     const upcoming = st.events
       .filter((e) => e.kind === "match")
       .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
@@ -150,7 +143,7 @@ App.screens = App.screens || {};
             class: "schedule-item",
             style: "width:100%; text-align:left;",
             "aria-label": `${m.title}を編集`,
-            onclick: () => { s.close(); openMatchSheet(st.settings.favoriteTeam || "応援チーム", m); },
+            onclick: () => { s.close(); openMatchSheet(TEAM_NAME, m); },
           }, [
             App.el("span", { class: "schedule-item__time", text: App.fmtDate(m.date, { weekday: false }) }),
             App.el("span", { class: "schedule-item__title", text: m.title.replace(/^⚽\s*/, "") }),
@@ -160,79 +153,46 @@ App.screens = App.screens || {};
       matchList.appendChild(listCard);
     }
 
-    const s = App.sheet("応援チームの試合予定", [
+    const s = App.sheet(`${TEAM_NAME}の試合予定`, [
       App.el("p", {
         style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);",
-        text: "対戦相手・日時を入力すると、その試合がカレンダーに登録されます。正式版では公式日程との自動連携を予定しています。",
+        text: "登録した試合はカレンダーに表示されます。正式版では公式日程との自動連携を予定しています。",
       }),
-      App.field("応援しているチーム", teamInput),
-      saveBtn,
-      addMatchBtn,
       importBtn,
+      addMatchBtn,
       matchList,
     ]);
-    const saveTeam = () => {
-      const team = teamInput.value.trim();
-      if (!team) { teamInput.focus(); App.toast("チーム名を入力してください", "info"); return null; }
-      App.store.state.settings.favoriteTeam = team;
-      App.store.save();
-      return team;
-    };
-    saveBtn.addEventListener("click", () => {
-      const team = saveTeam();
-      if (!team) return;
-      s.close();
-      App.refresh();
-      App.toast(`応援チームを「${team}」にしました`, "heart");
-    });
-    addMatchBtn.addEventListener("click", () => {
-      const team = saveTeam();
-      if (!team) return;
-      s.close();
-      openMatchSheet(team, null);
-    });
-    importBtn.addEventListener("click", () => {
-      const team = saveTeam();
-      if (!team) return;
-      s.close();
-      if (isKashiwaTeam(team)) {
-        App.store.update((st2) => {
-          KASHIWA_2026_FIXTURES.forEach((f) => {
-            st2.events.push({
-              id: App.uid(),
-              title: `⚽ ${team} vs ${f.opponent}(${f.venue === "home" ? "ホーム" : "アウェイ"})`,
-              date: f.date,
-              time: f.time,
-              opponent: f.opponent,
-              venue: f.venue,
-              memo: f.memo,
-              memberIds: st2.family.map((m) => m.id),
-              kind: "match",
-              color: 7,
-            });
-          });
-        });
-        App.toast(`${KASHIWA_2026_FIXTURES.length}試合をカレンダーに登録しました`, "calendar");
-        return;
+    const ensureTeamSaved = () => {
+      if (st.settings.favoriteTeam !== TEAM_NAME) {
+        App.store.state.settings.favoriteTeam = TEAM_NAME;
+        App.store.save();
       }
-      const fixtures = [
-        { days: 6, time: "14:00", note: "ホーム" },
-        { days: 13, time: "19:00", note: "アウェイ" },
-        { days: 27, time: "15:00", note: "ホーム" },
-      ];
+    };
+    importBtn.addEventListener("click", () => {
+      ensureTeamSaved();
+      s.close();
       App.store.update((st2) => {
-        fixtures.forEach((f) => {
+        KASHIWA_2026_FIXTURES.forEach((f) => {
           st2.events.push({
             id: App.uid(),
-            title: `⚽ ${team} 観戦(${f.note}・サンプル日程)`,
-            date: App.date.daysAhead(f.days),
+            title: `⚽ ${TEAM_NAME} vs ${f.opponent}(${f.venue === "home" ? "ホーム" : "アウェイ"})`,
+            date: f.date,
             time: f.time,
+            opponent: f.opponent,
+            venue: f.venue,
+            memo: f.memo,
             memberIds: st2.family.map((m) => m.id),
             kind: "match",
+            color: 7,
           });
         });
       });
-      App.toast("サンプル日程3試合をカレンダーに追加しました", "calendar");
+      App.toast(`${KASHIWA_2026_FIXTURES.length}試合をカレンダーに登録しました`, "calendar");
+    });
+    addMatchBtn.addEventListener("click", () => {
+      ensureTeamSaved();
+      s.close();
+      openMatchSheet(TEAM_NAME, null);
     });
   }
 
@@ -310,7 +270,7 @@ App.screens = App.screens || {};
           App.el("span", { class: "list-row__icon", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("heart", 18) }),
           App.el("span", { class: "list-row__body" }, [
             App.el("span", { text: "応援チームの試合予定" }),
-            App.el("span", { class: "list-row__sub", text: st.settings.favoriteTeam ? `${st.settings.favoriteTeam}を応援中` : "チーム未設定(サンプル日程で試せます)" }),
+            App.el("span", { class: "list-row__sub", text: st.settings.favoriteTeam ? `${st.settings.favoriteTeam}を応援中` : "タップして試合を登録" }),
           ]),
           App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
         ]),
