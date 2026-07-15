@@ -344,11 +344,16 @@
   background: var(--color-primary-light);
 }
 
-/* ---- FAB ---- */
+/* ---- FAB ----
+   position:fixedだと、LINEアプリ内ブラウザでコンテンツが長い画面(カレンダーの
+   週数が多い月など)でスクロール量に応じてずれて隠れる不具合があったため、
+   position:stickyに変更(v0.13.10)。同じ理由で.ai-input(AI相談の入力欄)も
+   既にstickyになっており、この画面ではその実績のあるパターンに合わせた。
+   各画面のrender()内で一番最後に追加される要素。 */
 .fab {
-  position: fixed;
-  right: max(var(--spacing-5), calc(50% - var(--app-max-width) / 2 + var(--spacing-5)));
+  position: sticky;
   bottom: calc(var(--nav-height) + var(--spacing-4) + env(safe-area-inset-bottom));
+  margin-left: auto; /* 右寄せ(sticky解除時の自然な位置でも右に来るように) */
   width: 56px;
   height: 56px;
   border-radius: var(--radius-full);
