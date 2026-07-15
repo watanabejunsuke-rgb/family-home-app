@@ -202,8 +202,9 @@
   align-self: flex-start; /* 親(.cal-day)のalign-items:stretchでセル幅いっぱいに
     広がり、中の数字だけ中央寄せに見えてしまうのを防ぐ。他の日付と同じ左位置で
     数字ちょうどのサイズの丸バッジにする */
-  min-width: 18px;
-  height: 18px;
+  width: 22px; /* min-widthではなく固定幅にし、2桁の日付でも高さと揃った
+    正円のまま(幅だけ伸びない)、数字がはみ出さないサイズにする */
+  height: 22px;
   border-radius: var(--radius-full);
   background: var(--color-primary);
   color: var(--color-on-primary);
