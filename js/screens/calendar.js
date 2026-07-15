@@ -99,6 +99,19 @@ App.screens = App.screens || {};
         }
         cursor.setMonth(cursor.getMonth() + 1);
       }
+    } else if (mode === "yearly") {
+      // 誕生日などの登録用。2/29は存在しない年はスキップする
+      const month = start.getMonth();
+      const day = start.getDate();
+      const cursor = new Date(start.getFullYear(), month, 1);
+      while (cursor.getFullYear() <= until.getFullYear()) {
+        const daysInMonth = new Date(cursor.getFullYear(), month + 1, 0).getDate();
+        if (day <= daysInMonth) {
+          const candidate = new Date(cursor.getFullYear(), month, day);
+          if (candidate >= start && candidate <= until) dates.push(App.date.str(candidate));
+        }
+        cursor.setFullYear(cursor.getFullYear() + 1);
+      }
     }
     return dates;
   }
@@ -211,12 +224,13 @@ App.screens = App.screens || {};
     let recur = "none";
     let recurUntilInput = null;
     if (!isEdit) {
-      const defaultUntil = () => {
+      // 毎年(誕生日など)は1年後までだと1回しか作られないため、既定を10年先までにする
+      const defaultUntil = (mode) => {
         const d = new Date(dateInput.value + "T00:00:00");
-        d.setFullYear(d.getFullYear() + 1);
+        d.setFullYear(d.getFullYear() + (mode === "yearly" ? 10 : 1));
         return App.date.str(d);
       };
-      recurUntilInput = App.el("input", { type: "date", value: defaultUntil() });
+      recurUntilInput = App.el("input", { type: "date", value: defaultUntil(recur) });
       const recurUntilField = App.field("いつまで", recurUntilInput);
       recurUntilField.style.display = "none";
 
@@ -224,6 +238,7 @@ App.screens = App.screens || {};
         const d = new Date(dateInput.value + "T00:00:00");
         if (mode === "weekly") return `毎週${WD_FULL[d.getDay()]}曜日`;
         if (mode === "monthly") return `毎月${d.getDate()}日`;
+        if (mode === "yearly") return `毎年${d.getMonth() + 1}月${d.getDate()}日`;
         return "しない";
       };
       const recurChips = App.chipSelect(
@@ -231,19 +246,22 @@ App.screens = App.screens || {};
           { value: "none", label: "しない" },
           { value: "weekly", label: recurLabel("weekly") },
           { value: "monthly", label: recurLabel("monthly") },
+          { value: "yearly", label: recurLabel("yearly") },
         ],
         recur,
         (v) => {
           recur = v;
           recurUntilField.style.display = v === "none" ? "none" : "";
+          if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(v);
         }
       );
-      // 日付を変えたら「毎週◯曜日」「毎月◯日」の表示も追従させる
+      // 日付を変えたら「毎週◯曜日」「毎月◯日」「毎年◯月◯日」の表示も追従させる
       dateInput.addEventListener("change", () => {
         const chipEls = recurChips.querySelectorAll(".chip");
         chipEls[1].textContent = recurLabel("weekly");
         chipEls[2].textContent = recurLabel("monthly");
-        if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil();
+        chipEls[3].textContent = recurLabel("yearly");
+        if (!recurUntilInput.dataset.touched) recurUntilInput.value = defaultUntil(recur);
       });
       recurUntilInput.addEventListener("input", () => { recurUntilInput.dataset.touched = "1"; });
 
@@ -406,11 +424,23 @@ App.screens = App.screens || {};
           const c = App.paletteColor(e.color || 0);
           // 応援チームの試合はホーム/アウェイをひと目で区別:ホーム=塗りつぶし、アウェイ=縁取り
           const isAway = e.kind === "match" && e.venue === "away";
-          const style = isAway
+          let style = isAway
             ? `background: transparent; border: 1px solid ${c.fg}; color: ${c.fg};`
             : `background: ${c.bg}; color: ${c.fg};`;
+          // 複数日にまたがる予定は、週の中で連続した1本の帯に見えるように
+          // 角丸を「その週で見えている範囲の始まり/終わり」だけに絞り、
+          // ラベルも帯の先頭にしか出さない(同じ文字が毎日繰り返されて見えるのを防ぐ)
+          let label = clipChars(e.title, 4);
+          if (e.endDate) {
+            const isRunStart = ds === e.date || dow === 1; // 実際の開始日、または週の月曜(継続の折り返し)
+            const isRunEnd = ds === e.endDate || dow === 0; // 実際の終了日、または週の日曜
+            const leftR = isRunStart ? "4px" : "0";
+            const rightR = isRunEnd ? "4px" : "0";
+            style += ` border-radius: ${leftR} ${rightR} ${rightR} ${leftR};`;
+            if (!isRunStart) label = " ";
+          }
           eventsWrap.appendChild(
-            App.el("span", { class: "cal-day__chip", style, text: clipChars(e.title, 4) })
+            App.el("span", { class: "cal-day__chip", style, text: label })
           );
         });
 
