@@ -55,7 +55,9 @@ function verifyIdToken(idToken) {
   });
   var data = JSON.parse(res.getContentText() || '{}');
   if (res.getResponseCode() !== 200 || !data.sub) {
-    throw new Error('IDトークンの検証に失敗しました');
+    // 原因切り分け用: LINE側の実際の応答を実行ログに残す(「実行数」から確認できる)
+    Logger.log('verify failed: code=' + res.getResponseCode() + ' body=' + res.getContentText());
+    throw new Error('IDトークンの検証に失敗しました: ' + res.getContentText());
   }
   return data.sub; // LINE userId
 }
