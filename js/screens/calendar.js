@@ -395,13 +395,17 @@ App.screens = App.screens || {};
       // LINEアプリ内ブラウザでスクロール量により位置がずれる不具合があったため、
       // 見出し右側の通常のボタン(常に画面内に流れて表示される)に変更(v0.13.11) ----
       const selectedHoliday = App.holidayName(view.selected);
-      const daySection = App.el("section", { class: "section cal-day-section" }, [
-        App.sectionHeader(`${App.fmtDate(view.selected)}${selectedHoliday ? "・" + selectedHoliday : ""}の予定`, {
-          icon: "calendar",
-          actionLabel: "予定を追加",
-          onAction: () => openEventSheet(null),
-        }),
-      ]);
+      const daySectionHeader = App.sectionHeader(`${App.fmtDate(view.selected)}${selectedHoliday ? "・" + selectedHoliday : ""}の予定`, { icon: "calendar" });
+      // 「追加」は別画面への遷移ではないため、共通のsectionHeaderの矢印付きアクションは使わず、
+      // 他の追加ボタン(やることを追加、等)と同じ「+アイコン+ラベル」の見た目に揃える
+      daySectionHeader.appendChild(
+        App.el("button", {
+          class: "section-header__action",
+          html: App.icon("plus", 14) + "<span>予定を追加</span>",
+          onclick: () => openEventSheet(null),
+        })
+      );
+      const daySection = App.el("section", { class: "section cal-day-section" }, [daySectionHeader]);
       const selectedEvents = App.data.eventsOn(view.selected);
       const dayCard = App.el("div", { class: "card card--lg cal-day-card" });
       if (selectedEvents.length === 0) {
