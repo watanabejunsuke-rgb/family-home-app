@@ -81,6 +81,7 @@ function doPost(e) {
     else if (action === 'setNotifPrefs') result = setNotifPrefs(userId, body.prefs);
     else if (action === 'uploadPlantPhoto') result = uploadPlantPhoto(userId, body.plantId, body.mimeType, body.dataBase64, body.filename);
     else if (action === 'deletePlantPhoto') result = deletePlantPhoto(userId, body.fileId);
+    else if (action === 'listConsultations') result = { consultations: listConsultationsForApp(userId, body.plantId, body.limit, body.before) };
     else throw new Error('unknown action: ' + action);
     return json(Object.assign({ ok: true }, result));
   } catch (err) {
@@ -417,9 +418,9 @@ function deletePlantPhoto(userId, fileId) {
 }
 
 // ============================================
-// AI植物相談(ChatGPT / GPT Actions連携) — Phase 1
-// ChatGPTで相談した内容を「保存」の一操作でスプレッドシート(consultations)に蓄積する。
-// 書き込みはGPT側のみ・ミニアプリは今のところ関与しない(閲覧はPhase 2で追加予定)。
+// AI植物相談(ChatGPT / GPT Actions連携) — Phase 1(保存)+ Phase 2(アプリ内閲覧)
+// ChatGPTで相談した内容を「保存」の一操作でスプレッドシート(consultations)に蓄積し、
+// ミニアプリの植物詳細画面で時系列に閲覧できる。書き込みはGPT側のみ(アプリは読み取り専用)。
 // 詳細設計: docs/plan-ai-consult-history.md / セットアップ: backend/plant-consult-gpt-setup.md
 // ============================================
 var CONSULT_SHEET_NAME = 'consultations';
@@ -503,6 +504,40 @@ function addConsultation(payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// 相談シートの全行をオブジェクト配列として読む(見出し行を除く)
+function readConsultRows() {
+  var sh = consultSheet();
+  var values = sh.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i++) {
+    var r = values[i];
+    if (!r[0]) continue;
+    out.push({
+      id: r[0], plantId: r[1], consultedAt: r[2], category: r[3],
+      question: r[4], answer: r[5], summary: r[6], diagnosis: r[7],
+      recommendation: r[8], nextCheckDate: r[9],
+      tags: r[10] ? String(r[10]).split(',') : [],
+      photoUrls: r[11] ? String(r[11]).split(',') : [],
+      transcript: r[12], source: r[13], createdAt: r[14], updatedAt: r[15],
+    });
+  }
+  return out;
+}
+
+// ミニアプリ側(Phase 2)から特定の植物の相談履歴を新しい順で取得する。
+// GPT向けのlistPlants/addConsultationと違い、こちらはLINEログイン(idToken)で認証する
+// ——アプリのJSは公開リポジトリにあるため、AI_CONSULT_TOKENをフロントには絶対に埋め込まないこと
+function listConsultationsForApp(userId, plantId, limit, before) {
+  var target = findByUser(readAll(sheet()), userId);
+  if (!target) throw new Error('世帯に参加していません');
+  if (!plantId) throw new Error('plantIdが必要です');
+  var rows = readConsultRows().filter(function (r) { return r.plantId === plantId; });
+  if (before) rows = rows.filter(function (r) { return r.consultedAt < before; });
+  rows.sort(function (a, b) { return String(b.consultedAt).localeCompare(String(a.consultedAt)); });
+  var lim = Math.min(Number(limit) || 20, 50);
+  return rows.slice(0, lim);
 }
 
 // ============================================

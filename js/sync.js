@@ -123,6 +123,13 @@ window.App = window.App || {};
       await this.call("deletePlantPhoto", { fileId });
     },
 
+    // AI植物相談の履歴を新しい順で取得する(読み取り専用。書き込みはGPT Actions側のみ)。
+    // enabled()判定はここでは行わず呼び出し側(植物詳細画面)が確認する
+    async listConsultations(plantId, opts) {
+      const r = await this.call("listConsultations", Object.assign({ plantId }, opts || {}));
+      return r.consultations || [];
+    },
+
     // 自分(このLINEアカウント)の通知オン・オフ設定をサーバーへ送る。
     // 世帯の共有データとは別枠(userIdごと)なので、他メンバーの設定には影響しない。
     // 失敗しても静かに諦める(次にトグルした時にまた送られる)

@@ -27,6 +27,59 @@ App.screens = App.screens || {};
   // 別画面への遷移ではなく同じ画面内のタブとして常に見える位置に置く
   let listTab = "mine"; // "mine" | "pedia"
 
+  // ---- AI植物相談(ChatGPT連携)の履歴閲覧。書き込みはGPT側のみ、ここは読み取り専用 ----
+  const CONSULT_CATEGORY_LABEL = {
+    disease: "病気", pest: "害虫", pruning: "剪定", repot: "植え替え",
+    fertilizer: "肥料", watering: "水やり", other: "その他",
+  };
+  // plantId -> { loading, items, error }。詳細画面を開くたびに取り直さないよう、
+  // タブを切り替えたりせずセッション中は保持する(手動の「更新」ボタンで明示的に取り直せる)
+  const consultCache = {};
+
+  function fmtConsultDate(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return "";
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  function fetchConsultations(plantId) {
+    if (consultCache[plantId]) return; // 取得済み・取得中なら何もしない
+    if (!App.sync || !App.sync.enabled || !App.sync.enabled()) return;
+    consultCache[plantId] = { loading: true, items: [] };
+    App.sync.listConsultations(plantId, { limit: 10 })
+      .then((items) => { consultCache[plantId] = { loading: false, items }; App.refresh(); })
+      .catch(() => { consultCache[plantId] = { loading: false, items: [], error: true }; App.refresh(); });
+  }
+
+  function openConsultSheet(item) {
+    const label = CONSULT_CATEGORY_LABEL[item.category] || item.category;
+    const field = (labelText, value) => App.el("div", { class: "field", style: "margin-bottom: var(--spacing-3);" }, [
+      App.el("span", { class: "field__label", text: labelText }),
+      App.el("p", { style: "white-space: pre-wrap; font-size: var(--text-sub); line-height: var(--line-height);", text: value }),
+    ]);
+    const content = [
+      App.el("span", { class: "badge badge--muted", style: "margin-bottom: var(--spacing-3);", text: label }),
+      field("相談内容", item.question),
+      field("回答", item.answer),
+    ];
+    if (item.diagnosis) content.push(field("診断", item.diagnosis));
+    if (item.recommendation) content.push(field("推奨対応", item.recommendation));
+    if (item.nextCheckDate) {
+      content.push(App.el("p", {
+        style: "font-size: var(--text-sub); color: var(--color-primary); font-weight: 600; margin-bottom: var(--spacing-3);",
+        text: `次回確認予定: ${App.fmtDate(item.nextCheckDate, { weekday: false })}`,
+      }));
+    }
+    if (item.tags && item.tags.length) {
+      content.push(
+        App.el("div", { style: "display: flex; flex-wrap: wrap; gap: 6px;" },
+          item.tags.map((t) => App.el("span", { class: "badge badge--muted", text: t }))
+        )
+      );
+    }
+    App.sheet(`${fmtConsultDate(item.consultedAt)}の相談`, content);
+  }
+
   function fmtShort(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -817,6 +870,48 @@ App.screens = App.screens || {};
     ]);
     growthSection.appendChild(growthCard);
     container.appendChild(growthSection);
+
+    // ---- AI相談履歴(ChatGPTで相談し「保存して」と伝えた内容。書き込みはGPT側のみの読み取り専用) ----
+    if (App.sync && App.sync.enabled && App.sync.enabled()) {
+      fetchConsultations(p.id);
+      const cache = consultCache[p.id] || { loading: true, items: [] };
+      const consultSection = App.el("section", { class: "section" }, [
+        App.sectionHeader("AI相談履歴", {
+          icon: "sparkle",
+          actionLabel: "更新",
+          onAction: () => { delete consultCache[p.id]; App.refresh(); },
+        }),
+      ]);
+      const consultCard = App.el("div", { class: "card card--lg" });
+      if (cache.loading) {
+        consultCard.appendChild(
+          App.el("p", { style: "font-size: var(--text-sub); color: var(--color-text-muted); text-align: center; padding: var(--spacing-3) 0;", text: "読み込み中…" })
+        );
+      } else if (cache.error) {
+        consultCard.appendChild(
+          App.el("p", { style: "font-size: var(--text-sub); color: var(--color-text-muted); text-align: center; padding: var(--spacing-3) 0;", text: "取得できませんでした。しばらくしてからもう一度お試しください。" })
+        );
+      } else if (cache.items.length === 0) {
+        consultCard.appendChild(
+          App.emptyState("sparkle", "まだAI相談の記録はありません", "ChatGPTで相談して「保存して」と伝えると、ここに残ります。")
+        );
+      } else {
+        cache.items.forEach((c) => {
+          consultCard.appendChild(
+            App.el("button", { class: "list-row", onclick: () => openConsultSheet(c) }, [
+              App.el("span", { class: "list-row__icon", style: "background: var(--cat-ai-bg); color: var(--cat-ai);", html: App.icon("sparkle", 18) }),
+              App.el("span", { class: "list-row__body" }, [
+                App.el("span", { text: c.summary || c.question }),
+                App.el("span", { class: "list-row__sub", text: `${fmtConsultDate(c.consultedAt)}・${CONSULT_CATEGORY_LABEL[c.category] || c.category}` }),
+              ]),
+              App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+            ])
+          );
+        });
+      }
+      consultSection.appendChild(consultCard);
+      container.appendChild(consultSection);
+    }
 
     // ---- 最近のお世話履歴 ----
     const recentLog = [...(p.careLog || [])].sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || "")).slice(0, 8);
