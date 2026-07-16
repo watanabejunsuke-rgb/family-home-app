@@ -314,11 +314,14 @@ App.screens = App.screens || {};
       const fam = App.store.state.family;
       if (fam.length > 1) {
         section.appendChild(
-          App.chipSelect(
-            [{ value: ALL_VALUE, label: "ALL" }, ...fam.map((m) => ({ value: m.id, label: m.name }))],
-            memberFilter || ALL_VALUE,
-            (v) => { memberFilter = v === ALL_VALUE ? null : v; App.refresh(); }
-          )
+          App.el("div", {}, [
+            App.el("span", { class: "field__label", text: "誰の関係" }),
+            App.chipSelect(
+              [{ value: ALL_VALUE, label: "ALL" }, ...fam.map((m) => ({ value: m.id, label: m.name }))],
+              memberFilter || ALL_VALUE,
+              (v) => { memberFilter = v === ALL_VALUE ? null : v; App.refresh(); }
+            ),
+          ])
         );
       } else {
         memberFilter = null;
@@ -329,13 +332,18 @@ App.screens = App.screens || {};
       // ALL/保育園を先に見せておく。実際に絞り込みが要らないのは全員が無関係のときだけ)
       if (contexts.length > 1 || (contexts.length === 1 && contexts[0] !== "関係未設定")) {
         if (contextFilter && !contexts.includes(contextFilter)) contextFilter = null;
+        // 関係の種類は際限なく増えうるため、折り返さず横スクロールにする(誰の関係は
+        // 家族という少人数の固定集合なので折り返しのままでよい)
+        const contextChips = App.chipSelect(
+          [{ value: ALL_VALUE, label: "ALL" }, ...contexts.map((c) => ({ value: c, label: c }))],
+          contextFilter || ALL_VALUE,
+          (v) => { contextFilter = v === ALL_VALUE ? null : v; App.refresh(); }
+        );
+        contextChips.classList.add("chip-row--scroll");
         section.appendChild(
-          App.el("div", { style: "margin-top: var(--spacing-3);" }, [
-            App.chipSelect(
-              [{ value: ALL_VALUE, label: "ALL" }, ...contexts.map((c) => ({ value: c, label: c }))],
-              contextFilter || ALL_VALUE,
-              (v) => { contextFilter = v === ALL_VALUE ? null : v; App.refresh(); }
-            ),
+          App.el("div", { style: "margin-top: var(--spacing-4);" }, [
+            App.el("span", { class: "field__label", text: "どこの関係" }),
+            contextChips,
           ])
         );
       } else {

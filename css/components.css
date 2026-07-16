@@ -154,6 +154,16 @@
 .badge--muted   { background: var(--color-divider); color: var(--color-text-secondary); }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--spacing-2); }
+/* 選択肢が青天井に増えうる絞り込み(お友達の「どこの関係」など)向け。
+   折り返して縦に伸びる代わりに、1行のまま横スクロールさせる */
+.chip-row--scroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.chip-row--scroll::-webkit-scrollbar { display: none; }
+.chip-row--scroll .chip { flex-shrink: 0; }
 .chip {
   display: inline-flex;
   align-items: center;
