@@ -1,6 +1,6 @@
 # AI植物相談(ChatGPT連携)セットアップ手順 — Phase 1
 
-ChatGPTで植物について相談し、「保存して」の一言でその内容を`backend/Code.gs`経由でスプレッドシートに蓄積する機能のセットアップ手順。**渡辺さんの操作**が必要です（ChatGPT側のGPT作成は代行できないため）。所要 15分程度。
+ChatGPTで植物について相談し、「保存して」の一言でその内容を`backend/Code.gs`経由でスプレッドシートに蓄積する機能のセットアップ手順。**渡辺さんの操作**が必要です（ChatGPT側のGPT作成は代行できないため）。所要 30分程度(うちCloudflare Workerの準備に10〜15分)。
 
 このPhase 1では、**保存だけ**ができるようになります（アプリ内での閲覧はPhase 2で追加予定）。保存された内容はスプレッドシートで直接見られます。
 
@@ -52,18 +52,78 @@ https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWg
 
 ---
 
-## 6. ChatGPTでカスタムGPTを作る
+## 6. ChatGPTからの接続用に中継サーバー(Cloudflare Worker)を立てる
+
+**これは省略できない手順です。** GASのウェブアプリURL(`.../exec`)は、ChatGPT Actionsのようなサーバー間の自動アクセスだと、Google側に「ファイルを開けません」というエラーページで弾かれることが確認されています(ブラウザで直接開く分には問題なし)。ChatGPT → 中継サーバー(Cloudflare Worker) → GAS、という経路にすることでこれを回避します。**無料・クレジットカード登録不要**です。
+
+### 6-1. Cloudflareアカウントを作る
+
+[dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) でメールアドレス+パスワードで登録する(確認メールが届くので開いて認証)。
+
+### 6-2. Workerを作る
+
+1. ログイン後、左メニューの **「Build」**セクションにある **「Compute」**(または「Workers & Pages」)をクリック。
+2. **「Create application」**(作成)→ **「Start with Hello World!」**を選ぶ。
+3. Worker名は任意(例: `plant-consult-proxy`。自動生成された名前のままでも構わない)。
+4. そのまま **「Deploy」** する(初期状態のサンプルコードが先にデプロイされる)。
+5. デプロイ後の画面で **「Edit code」**をクリック。
+
+### 6-3. コードを貼り替える
+
+エディタのデフォルトコードを全部消して、下記に貼り替える。**`GAS_URL`の値は、実際にデプロイしているGASのウェブアプリURL(`js/config.js`の`SYNC_URL`と同じもの)に置き換えること**:
+
+```js
+export default {
+  async fetch(request) {
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWgMskkeVP6ELOI6ADsN-uN1RzBYg/exec";
+    const url = new URL(request.url);
+    const target = GAS_URL + url.search; // action・token・query等のクエリ文字列をそのまま引き継ぐ
+
+    const init = {
+      method: request.method,
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      redirect: "follow",
+    };
+    if (request.method === "POST") {
+      init.body = await request.text(); // ChatGPTが送ったJSON本文をそのままGASへ転送
+    }
+
+    const res = await fetch(target, init);
+    const body = await res.text();
+    return new Response(body, {
+      status: res.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  },
+};
+```
+
+貼り替えたら **「Save and Deploy」**(保存してデプロイ)。
+
+### 6-4. WorkerのURLを控えて動作確認する
+
+画面上部に表示される `https://<worker名>.<あなたのサブドメイン>.workers.dev` の形式のURLをコピーする。ブラウザで以下を開き(`YOUR_TOKEN`は手順3で決めた値)、`{"ok":true,"plants":[...]}`が返れば成功:
+
+```
+https://<worker名>.<あなたのサブドメイン>.workers.dev/?action=listPlants&token=YOUR_TOKEN
+```
+
+このWorkerのURLは、次の手順(ChatGPT側のスキーマ)で`servers.url`として使う。
+
+---
+
+## 7. ChatGPTでカスタムGPTを作る
 
 **必要なプラン**: ChatGPT Plus / Team / Pro / Enterprise のいずれか。無料プランではカスタムGPT(GPTs)を作成できません。
 
-### 6-1. GPT作成画面を開く
+### 7-1. GPT作成画面を開く
 
 1. [chatgpt.com](https://chatgpt.com) にログイン。
 2. 左サイドバーの **「GPTを探す」**(英語表記なら "Explore GPTs")をクリック。
 3. 右上の **「+ 作成する」**("+ Create")をクリック。
 4. 画面上部に **「作成」**(Create)と**「構成」**(Configure)の2つのタブが出る。会話形式で作る「作成」タブは使わず、**「構成」タブ**をクリックして直接入力する(この方が確実で速い)。
 
-### 6-2. 基本情報を入力する
+### 7-2. 基本情報を入力する
 
 「構成」タブで上から順に埋める:
 
@@ -71,7 +131,7 @@ https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWg
 - **説明**: 「植物の様子・症状を相談すると、内容を記録してくれるアシスタント」など任意(空でも動く)。
 - **プロフィール画像**: 任意。設定しなくても動作に影響しない。
 
-### 6-3. Instructions(指示文)を貼り付ける
+### 7-3. Instructions(指示文)を貼り付ける
 
 同じ画面の **「Instructions」** の大きなテキスト欄に、下記をそのまま貼り付ける。
 `YOUR_TOKEN` の部分は、**手順3で決めた `AI_CONSULT_TOKEN` の値に必ず置き換えること**(このままだと動きません)。
@@ -104,11 +164,11 @@ https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWg
 保存に失敗したら理由をそのままユーザーに伝える。
 ```
 
-### 6-4. Actionsを追加する
+### 7-4. Actionsを追加する
 
 1. 「構成」タブを下にスクロールすると **「Actions」** という欄がある。
 2. **「新しいアクションを作成する」**("Create new action")をクリックすると、別画面(Actionエディタ)が開く。
-3. 画面下部の **「スキーマ」**("Schema")という大きなテキスト欄が編集可能になっている。下のOpenAPIスキーマを**丸ごとコピーして貼り付ける**(`server`のURLはすでにこのプロジェクトの実URLになっているので書き換え不要)。
+3. 画面下部の **「スキーマ」**("Schema")という大きなテキスト欄が編集可能になっている。下のOpenAPIスキーマを**丸ごとコピーして貼り付け、`servers.url`を手順6-4で控えたWorkerのURLに書き換える**(GASの直リンクのままだと接続できない)。
 
 ```yaml
 openapi: 3.1.0
@@ -116,7 +176,7 @@ info:
   title: 暮らしnote 植物相談 API
   version: 1.0.0
 servers:
-  - url: https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWgMskkeVP6ELOI6ADsN-uN1RzBYg/exec
+  - url: https://plant-consult-proxy.あなたのサブドメイン.workers.dev
 paths:
   /:
     get:
@@ -197,12 +257,12 @@ paths:
 6. 各アクションの右側に **「テスト」**("Test")ボタンがある。まず `listPlants` の「テスト」を押し、`token`欄に手順3で決めた値を入力して実行する。うちの植物一覧(`{"ok":true,"plants":[...]}`)が返れば接続成功。エラーが出た場合は「既知の注意点」を参照。
 7. Action画面右上の **「保存」**をクリックしてActionエディタを閉じる。
 
-### 6-5. 忘れずに: 公開範囲を「自分のみ」にする
+### 7-5. 忘れずに: 公開範囲を「自分のみ」にする
 
 1. 画面右上の **「保存する」**("Save"/"Create")をクリックすると、公開範囲を聞かれる。
 2. 必ず **「自分のみ」**("Only me")を選ぶこと。「リンクを知っている人」や「全員に公開」を選ぶと、この指示文に書いたトークン(合言葉)や家族の植物データに他人がアクセスできてしまう。
 
-### 6-6. 動作確認
+### 7-6. 動作確認
 
 1. GPT編集画面の右側(または保存後にGPTを開いた画面)のチャットで、「モンステラの葉先が黄色くなってきた」のように話しかける。
 2. 「葉先が黄色いのは水のやりすぎが多い原因です」等の返答のあと、「保存して」と伝える。
@@ -213,7 +273,7 @@ paths:
 
 ## 既知の注意点
 
-- GASのウェブアプリURLは呼び出し時に302リダイレクトを挟みます。ChatGPT Actionsは通常リダイレクトに追従しますが、うまく動かない場合はまずここを疑ってください。
+- **GASのウェブアプリURLに直接ChatGPT Actionsを向けると、Google側に「ファイルを開けません」というエラーページで弾かれることを確認済みです**(2026-07-16)。ブラウザで直接開く分には問題ないので気づきにくい。手順6のCloudflare Workerを経由させることで解消することを確認しています(GET/POSTとも)。もしWorkerを経由しているのに同じ症状が出る場合は、スキーマの`servers.url`がGASの直リンクのままになっていないか確認してください。
 - `listPlants`・`addConsultation`とも、うちの植物データは「家族と共有」設定（世帯参加）が前提です。世帯未参加の状態だとエラーになります。
 - Phase 1はGPT側からの保存のみです。アプリ内で相談履歴を見られるようにするのはPhase 2（`docs/plan-ai-consult-history.md`参照）で対応予定です。
 - **トークンはInstructions欄に平文で書かれます**。公開範囲を「自分のみ」にしておけば、原則自分以外はInstructionsの中身を見られません。今後もし「リンクを共有」「GPTストアに公開」などを検討する場合は、その前に必ずトークンの扱いを見直してください（token不要の別の認証方式へ切り替える等）。
