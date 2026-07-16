@@ -247,14 +247,18 @@ App.screens = App.screens || {};
         { label: "植物の記録", icon: "leaf", cat: "plant", route: "plants" },
         { label: "植物図鑑", icon: "leaf", cat: "plant", route: "pedia" },
         { label: "メモ・日記", icon: "note", cat: "note", route: "notes" },
-        { label: "AIに相談", icon: "sparkle", cat: "ai", route: "ai" },
+        // デモ版であることが一覧の時点で分かるよう明示(本物のAI相談と誤解されないため)
+        { label: "AIに相談", icon: "sparkle", cat: "ai", route: "ai", sub: "デモ版・固定文言での応答です" },
       ];
       const linkCard = App.el("div", { class: "card card--lg" });
       links.forEach((l) => {
         linkCard.appendChild(
           App.el("button", { class: "list-row", onclick: () => App.go(l.route) }, [
             App.el("span", { class: "list-row__icon", style: `background: var(--cat-${l.cat}-bg); color: var(--cat-${l.cat});`, html: App.icon(l.icon, 18) }),
-            App.el("span", { class: "list-row__body", text: l.label }),
+            App.el("span", { class: "list-row__body" }, [
+              App.el("span", { text: l.label }),
+              l.sub ? App.el("span", { class: "list-row__sub", text: l.sub }) : null,
+            ]),
             App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
           ])
         );
