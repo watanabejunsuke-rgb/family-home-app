@@ -107,12 +107,18 @@ App.screens = App.screens || {};
       gradeOffset || UNKNOWN_VALUE,
       (v) => (gradeOffset = v === UNKNOWN_VALUE ? "" : v)
     );
+    const gradeHint = App.el("p", {
+      style: "font-size: var(--text-caption); color: var(--color-text-muted);",
+      text: "↑ 対象の子を選ぶと、学年を選べるようになります",
+    });
     const gradeField = App.el("div", { class: "field" }, [
       App.el("span", { class: "field__label", text: "学年(生年月日が分からない場合。対象の子との比較)" }),
       gradeChips,
+      gradeHint,
     ]);
     function syncGradeVisibility() {
-      gradeField.style.display = relatedMemberId ? "" : "none";
+      gradeChips.style.display = relatedMemberId ? "" : "none";
+      gradeHint.style.display = relatedMemberId ? "none" : "";
     }
     syncGradeVisibility();
 
@@ -120,11 +126,7 @@ App.screens = App.screens || {};
     if (isEdit && contact.note) noteInput.value = contact.note;
 
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "追加する" });
-    const content = [
-      App.field("なまえ", nameInput),
-      App.field("生年月日(任意。分かれば年齢・学年を自動計算します)", birthdayInput),
-      contextField,
-    ];
+    const content = [App.field("なまえ", nameInput), contextField];
     if (relatedChips) {
       content.push(
         App.el("div", { class: "field" }, [
@@ -134,7 +136,11 @@ App.screens = App.screens || {};
         gradeField
       );
     }
-    content.push(App.field("メモ(任意)", noteInput), saveBtn);
+    content.push(
+      App.field("生年月日(任意。分かれば年齢・学年を自動計算します)", birthdayInput),
+      App.field("メモ(任意)", noteInput),
+      saveBtn
+    );
 
     if (isEdit) {
       const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>削除する</span>" });
