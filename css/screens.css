@@ -304,27 +304,31 @@
 }
 .shopping-add button:active { background: var(--color-primary-strong); }
 
-/* ---- 植物:一覧行(サムネ+状態1つ+水やりボタンのみに絞る) ---- */
-.plant-row { display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2); }
-.plant-row__main {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--spacing-3);
-  background: var(--color-surface); border-radius: var(--radius-md); padding: var(--spacing-2) var(--spacing-3);
-  box-shadow: var(--shadow-card); text-align: left;
+/* ---- 植物:一覧グリッド(写真を主役にした2列カード。状態は名前の下に1つだけ) ---- */
+.plant-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-3); }
+.plant-tile { position: relative; }
+.plant-tile__link {
+  display: block; width: 100%; text-align: left; background: var(--color-surface);
+  border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-card);
 }
-.plant-row__thumb {
-  width: 44px; height: 44px; border-radius: var(--radius-sm); flex-shrink: 0;
-  background-size: cover; background-position: center; background-color: var(--cat-plant-bg);
+.plant-tile__photo {
+  display: block; height: 148px; background-size: cover; background-position: center;
+  background-color: var(--cat-plant-bg);
 }
-.plant-row__thumb--empty { display: flex; align-items: center; justify-content: center; color: var(--cat-plant); }
-.plant-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.plant-row__name { font-weight: 600; font-size: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plant-row__place { font-size: var(--text-caption); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plant-row__water {
-  flex-shrink: 0; width: var(--tap-target); height: var(--tap-target); border-radius: var(--radius-full);
-  background: var(--color-surface); box-shadow: var(--shadow-card); color: var(--color-text-muted);
+.plant-tile__photo--empty {
+  display: flex; align-items: center; justify-content: center; color: var(--color-primary);
+  background: linear-gradient(150deg, var(--color-primary-light) 0%, var(--color-accent-light) 100%);
+}
+.plant-tile__body { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: var(--spacing-2) var(--spacing-3) var(--spacing-3); }
+.plant-tile__name { font-weight: 600; font-size: var(--text-body); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plant-tile__place { font-size: var(--text-caption); color: var(--color-text-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px; }
+/* 写真の高さ(148px)基準で右下隅に固定。本文の行数で位置がぶれないようtopで指定する */
+.plant-tile__water {
+  position: absolute; right: 8px; top: 104px; width: 36px; height: 36px; border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.92); box-shadow: var(--shadow-raised); color: var(--color-text-secondary);
   display: flex; align-items: center; justify-content: center;
 }
-.plant-row__water--due { color: var(--color-on-primary); background: var(--cat-plant); }
+.plant-tile__water--due { color: var(--color-on-primary); background: var(--cat-plant); }
 
 /* ---- 植物:詳細のヒーロー写真(最新の1枚。無ければ淡いグラデーション+葉アイコン) ---- */
 .plant-hero {
@@ -352,6 +356,12 @@
 }
 .plant-hero__name { font-size: var(--text-heading); font-weight: 700; }
 .plant-hero__place { font-size: var(--text-sub); opacity: 0.9; }
+
+/* ---- 植物:カバー写真の位置調整シート(タップした位置を中心にする) ---- */
+.cover-reposition {
+  display: block; width: 100%; height: 220px; border-radius: var(--radius-md);
+  background-size: cover; background-color: var(--cat-plant-bg); cursor: crosshair;
+}
 
 /* ---- 植物:状態ヒーローカード(最優先①「今日やること」を一文で) ---- */
 .plant-status { margin-top: var(--spacing-3); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4); }

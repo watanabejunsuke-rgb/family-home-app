@@ -19,6 +19,10 @@ App.screens = App.screens || {};
 
   // アップロード中の植物ID(一時的な表示状態。永続化しない)
   const uploadingIds = new Set();
+  const uploadingCoverIds = new Set();
+
+  // 一覧の場所フィルタ(セッション中だけ保持。再読み込みで「すべて」に戻る)
+  let placeFilter = null;
 
   function fmtShort(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
@@ -218,6 +222,120 @@ App.screens = App.screens || {};
     return p.photos;
   }
 
+  // ---- カバー写真(一覧のサムネ・詳細のヒーローに使う「固定の顔」) ----
+  // 個別に設定していれば常にそれを使い、無ければ成長の記録の最新写真にフォールバックする。
+  // 表示位置(どこを中心に見せるか)はcoverFocusで別途持つ(トリミングではなく位置調整)。
+  function coverPhotoOf(p) {
+    if (p.cover && p.cover.url) return p.cover;
+    const photos = photosOf(p);
+    return photos.length ? photos[photos.length - 1] : null;
+  }
+  function coverBgPosition(p) {
+    const f = p.coverFocus;
+    return f ? `${f.x}% ${f.y}%` : "50% 50%";
+  }
+
+  async function uploadCoverPhoto(plant, file) {
+    uploadingCoverIds.add(plant.id);
+    App.refresh();
+    try {
+      const base64 = await App.compressImageFile(file);
+      const { id, url } = await App.sync.uploadPhoto(plant.id + "-cover", base64, "image/jpeg", plant.id + "-cover");
+      let prevId = null;
+      App.store.update((st) => {
+        const p = st.plants.find((x) => x.id === plant.id);
+        if (!p) return;
+        if (p.cover && p.cover.id) prevId = p.cover.id;
+        p.cover = { id, url };
+        p.coverFocus = { x: 50, y: 50 };
+      });
+      if (prevId) App.sync.deletePhoto(prevId).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+      App.toast("カバー写真を設定しました", "sparkle");
+    } catch (e) {
+      App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
+    } finally {
+      uploadingCoverIds.delete(plant.id);
+      App.refresh();
+    }
+  }
+
+  // カバー写真の位置調整・変更・解除(タップした場所を中心にする、というシンプルな方式。
+  // 矩形選択の本格的なトリミングではないが、Vanilla JSかつDriveの原本を保つ範囲でいちばん軽い実装)
+  function openCoverSheet(plant) {
+    const p = plant;
+    const cover = coverPhotoOf(p);
+    let pos = { ...(p.coverFocus || { x: 50, y: 50 }) };
+
+    const coverInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
+    coverInput.addEventListener("change", () => {
+      const file = coverInput.files && coverInput.files[0];
+      coverInput.value = "";
+      if (file) { s.close(); uploadCoverPhoto(p, file); }
+    });
+    const uploadBtn = App.el("button", {
+      class: "btn-secondary",
+      html: App.icon("camera", 18) + `<span>${cover ? "別の写真をカバーにする" : "カバー写真を設定する"}</span>`,
+      onclick: () => {
+        if (!App.sync.enabled()) { App.toast("写真の保存には「家族と共有」の設定が必要です", "info"); return; }
+        coverInput.click();
+      },
+    });
+
+    const content = [];
+    let saveBtn = null;
+    if (cover) {
+      const preview = App.el("button", {
+        class: "cover-reposition",
+        "aria-label": "タップして中心にしたい場所を選ぶ",
+        style: `background-image: url('${cover.url}'); background-position: ${pos.x}% ${pos.y}%;`,
+      });
+      preview.addEventListener("click", (e) => {
+        const rect = preview.getBoundingClientRect();
+        pos = {
+          x: Math.round(((e.clientX - rect.left) / rect.width) * 100),
+          y: Math.round(((e.clientY - rect.top) / rect.height) * 100),
+        };
+        preview.style.backgroundPosition = `${pos.x}% ${pos.y}%`;
+      });
+      content.push(
+        App.el("p", { style: "font-size: var(--text-caption); color: var(--color-text-muted); margin-bottom: var(--spacing-2);", text: "写真をタップすると、中心に見せたい場所を選べます(矩形での切り抜きではなく、表示位置の調整です)。" }),
+        preview
+      );
+      saveBtn = App.el("button", { class: "btn-primary", style: "margin-top: var(--spacing-3);", text: "この位置で保存" });
+      content.push(saveBtn);
+    }
+    content.push(App.el("div", { style: "margin-top: var(--spacing-3);" }, [uploadBtn, coverInput]));
+    if (p.cover) {
+      const removeBtn = App.el("button", {
+        class: "btn-danger-text", style: "margin-top: var(--spacing-3);",
+        html: App.icon("trash", 16) + "<span>カバー写真を外す(最新の写真に戻す)</span>",
+      });
+      removeBtn.addEventListener("click", () => {
+        s.close();
+        const removedId = p.cover.id;
+        App.store.update((st) => {
+          const x = st.plants.find((k) => k.id === p.id);
+          if (x) { delete x.cover; delete x.coverFocus; }
+        });
+        App.sync.deletePhoto(removedId).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+        App.toast("カバー写真を外しました", "trash");
+      });
+      content.push(removeBtn);
+    }
+
+    const s = App.sheet(cover ? "カバー写真" : "カバー写真を設定", content);
+    if (saveBtn) {
+      saveBtn.addEventListener("click", () => {
+        s.close();
+        App.store.update((st) => {
+          const x = st.plants.find((k) => k.id === p.id);
+          if (x) x.coverFocus = pos;
+        });
+        App.toast("カバー写真の位置を保存しました", "sparkle");
+      });
+    }
+  }
+
   function openPhotoConfirmSheet(plant, file) {
     const previewUrl = URL.createObjectURL(file);
     const labelInput = App.el("input", { type: "text", value: "", placeholder: "コメント(任意。例:摘芯しました)" });
@@ -292,12 +410,39 @@ App.screens = App.screens || {};
     opts = opts || {};
     let cycle = isEdit ? plant.cycleDays : (opts.cycleDays || 7);
     const nameInput = App.el("input", { type: "text", value: isEdit ? plant.name : (opts.name || ""), placeholder: "例:パキラ" });
-    const placeInput = App.el("input", { type: "text", value: isEdit ? plant.place : "", placeholder: "例:リビング" });
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "植物を追加" });
+
+    // 置き場所は一覧の場所フィルタと表記を揃えたいので、既存の場所があればプルダウンから選ぶ形にする。
+    // まだ場所が1つも登録されていない(最初の1鉢)ときは、選ぶ候補が無いので通常のテキスト入力にする。
+    const NEW_PLACE = "__new__";
+    const existingPlaces = [...new Set(App.store.state.plants.map((pl) => pl.place).filter(Boolean))].sort();
+    const initialPlace = isEdit ? (plant.place || "") : "";
+    let getPlace;
+    let placeField;
+    if (existingPlaces.length > 0) {
+      const knownInitial = initialPlace && existingPlaces.includes(initialPlace);
+      const placeSelect = App.el("select", {}, [
+        ...existingPlaces.map((pl) =>
+          App.el("option", { value: pl, text: pl, selected: pl === initialPlace ? "selected" : null })
+        ),
+        App.el("option", { value: NEW_PLACE, text: "＋ 新しい場所を追加", selected: knownInitial ? null : "selected" }),
+      ]);
+      const newPlaceInput = App.el("input", { type: "text", value: knownInitial ? "" : initialPlace, placeholder: "例:寝室" });
+      const newPlaceField = App.field("新しい場所の名前", newPlaceInput);
+      const syncPlaceMode = () => { newPlaceField.style.display = placeSelect.value === NEW_PLACE ? "" : "none"; };
+      placeSelect.addEventListener("change", () => { syncPlaceMode(); if (placeSelect.value === NEW_PLACE) newPlaceInput.focus(); });
+      syncPlaceMode();
+      placeField = App.el("div", {}, [App.field("置き場所", placeSelect), newPlaceField]);
+      getPlace = () => (placeSelect.value === NEW_PLACE ? newPlaceInput.value.trim() : placeSelect.value);
+    } else {
+      const placeInput = App.el("input", { type: "text", value: initialPlace, placeholder: "例:リビング" });
+      placeField = App.field("置き場所", placeInput);
+      getPlace = () => placeInput.value.trim();
+    }
 
     const content = [
       App.field("植物の名前", nameInput),
-      App.field("置き場所", placeInput),
+      placeField,
       App.el("div", { class: "field" }, [
         App.el("span", { class: "field__label", text: "水やりの間隔" }),
         App.chipSelect(
@@ -335,12 +480,13 @@ App.screens = App.screens || {};
       const name = nameInput.value.trim();
       if (!name) { nameInput.focus(); App.toast("植物の名前を入力してください", "info"); return; }
       s.close();
+      const place = getPlace();
       App.store.update((st) => {
         if (isEdit) {
           const p = st.plants.find((x) => x.id === plant.id);
-          if (p) Object.assign(p, { name, place: placeInput.value.trim(), cycleDays: cycle });
+          if (p) Object.assign(p, { name, place, cycleDays: cycle });
         } else {
-          st.plants.push({ id: App.uid(), name, place: placeInput.value.trim(), cycleDays: cycle, wateredAt: App.date.today(), careTasks: [], careLog: [], photos: [] });
+          st.plants.push({ id: App.uid(), name, place, cycleDays: cycle, wateredAt: App.date.today(), careTasks: [], careLog: [], photos: [] });
         }
       });
       App.toast(isEdit ? "変更しました" : `「${name}」を追加しました`);
@@ -354,7 +500,7 @@ App.screens = App.screens || {};
   // 一覧 — 「今日どの鉢に触るべきか」だけが3秒で分かることに徹する
   // ============================================
   function renderPlantList(container) {
-    const plants = App.store.state.plants;
+    const allPlants = App.store.state.plants;
 
     container.appendChild(
       App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [
@@ -368,13 +514,31 @@ App.screens = App.screens || {};
 
     const section = App.el("section", { class: "section", style: "margin-top: 0;" });
 
-    if (plants.length === 0) {
+    if (allPlants.length === 0) {
       section.appendChild(
         App.el("div", { class: "card card--lg" }, [
           App.emptyState("leaf", "植物がまだ登録されていません", "右下の+から最初のひと鉢を追加しましょう。"),
         ])
       );
+      container.appendChild(section);
+      container.appendChild(App.fab("植物を追加", () => openPlantSheet(null)));
+      return;
     }
+
+    // 場所フィルタ(登録されている場所が2種類以上あるときだけ出す)
+    const places = [...new Set(allPlants.map((p) => p.place || "置き場所未設定"))];
+    if (places.length > 1) {
+      section.appendChild(
+        App.chipSelect(
+          ["すべて", ...places],
+          placeFilter || "すべて",
+          (v) => { placeFilter = v === "すべて" ? null : v; App.refresh(); }
+        )
+      );
+    } else {
+      placeFilter = null;
+    }
+    const plants = placeFilter ? allPlants.filter((p) => (p.place || "置き場所未設定") === placeFilter) : allPlants;
 
     // 対応が必要なものを先に(水やり目安日 → お手入れ適期・今日・期限すぎ → それ以外は登録順)
     const rank = (p) => {
@@ -384,39 +548,39 @@ App.screens = App.screens || {};
     };
     const sorted = [...plants].sort((a, b) => rank(a) - rank(b));
 
+    const grid = App.el("div", { class: "plant-grid", style: places.length > 1 ? "margin-top: var(--spacing-3);" : "" });
     sorted.forEach((p) => {
       const left = App.plantDaysLeft(p);
       const due = left <= 0;
       const careUrgent = careTasksOf(p).find((t) => ["今日", "いま適期", "すぎています", "期間すぎ"].includes(careStatus(t).badge));
-      const photos = photosOf(p);
-      const latestPhoto = photos.length ? photos[photos.length - 1] : null;
+      const cover = coverPhotoOf(p);
 
-      const thumb = latestPhoto
-        ? App.el("span", { class: "plant-row__thumb", style: `background-image: url('${latestPhoto.url}');` })
-        : App.el("span", { class: "plant-row__thumb plant-row__thumb--empty", html: App.icon("leaf", 20) });
+      const photo = cover
+        ? App.el("span", { class: "plant-tile__photo", style: `background-image: url('${cover.url}'); background-position: ${coverBgPosition(p)};` })
+        : App.el("span", { class: "plant-tile__photo plant-tile__photo--empty", html: App.icon("leaf", 30) });
 
       let badge;
       if (due) badge = App.el("span", { class: "badge badge--warning", text: "そろそろ水やり" });
       else if (careUrgent) badge = App.el("span", { class: "badge badge--warning", text: careUrgent.label });
       else badge = App.el("span", { class: "badge badge--muted", text: `あと${left}日` });
 
-      const navBtn = App.el("button", {
-        class: "plant-row__main",
+      const link = App.el("button", {
+        class: "plant-tile__link",
         "aria-label": `「${p.name}」の詳細を見る(${due ? "そろそろ水やり" : `あと${left}日`})`,
         onclick: () => App.go("plants", p.id),
       }, [
-        thumb,
-        App.el("span", { class: "plant-row__body" }, [
-          App.el("span", { class: "plant-row__name", text: p.name }),
-          App.el("span", { class: "plant-row__place", text: p.place || "置き場所未設定" }),
+        photo,
+        App.el("span", { class: "plant-tile__body" }, [
+          App.el("span", { class: "plant-tile__name", text: p.name }),
+          App.el("span", { class: "plant-tile__place", text: p.place || "置き場所未設定" }),
+          badge,
         ]),
-        badge,
       ]);
 
       const waterBtn = App.el("button", {
-        class: "icon-btn plant-row__water" + (due ? " plant-row__water--due" : ""),
+        class: "plant-tile__water" + (due ? " plant-tile__water--due" : ""),
         "aria-label": `「${p.name}」に水やりした`,
-        html: App.icon("drop", 20),
+        html: App.icon("drop", 18),
         onclick: () => {
           App.store.update((st) => {
             const x = st.plants.find((k) => k.id === p.id);
@@ -426,8 +590,9 @@ App.screens = App.screens || {};
         },
       });
 
-      section.appendChild(App.el("div", { class: "plant-row" }, [navBtn, waterBtn]));
+      grid.appendChild(App.el("div", { class: "plant-tile" }, [link, waterBtn]));
     });
+    section.appendChild(grid);
 
     container.appendChild(section);
     container.appendChild(App.fab("植物を追加", () => openPlantSheet(null)));
@@ -456,22 +621,31 @@ App.screens = App.screens || {};
     const status = heroStatus(p);
     const pedia = matchPedia(p);
     const photos = photosOf(p);
-    const heroPhoto = photos.length ? photos[photos.length - 1] : null;
+    const cover = coverPhotoOf(p);
+    const coverUploading = uploadingCoverIds.has(p.id);
 
-    // ---- ヒーロー写真(直近の写真。無ければ葉アイコン+淡いグラデーションへフォールバック) ----
-    const hero = App.el("div", { class: "plant-hero" + (heroPhoto ? "" : " plant-hero--empty") });
-    if (heroPhoto) {
+    // ---- ヒーロー写真(固定のカバー写真。個別設定が無ければ成長の記録の最新写真。
+    // タップでカバーの位置調整・変更ができる) ----
+    const hero = App.el("div", { class: "plant-hero" + (cover ? "" : " plant-hero--empty") });
+    if (cover) {
       hero.appendChild(
         App.el("button", {
           class: "plant-hero__photo",
-          "aria-label": "写真を見る",
-          style: `background-image: url('${heroPhoto.url}');`,
-          onclick: () => openPhotoSheet(p, heroPhoto),
+          "aria-label": "カバー写真を調整する",
+          style: `background-image: url('${cover.url}'); background-position: ${coverBgPosition(p)};`,
+          onclick: () => { if (!coverUploading) openCoverSheet(p); },
         })
       );
       hero.appendChild(App.el("div", { class: "plant-hero__scrim" }));
     } else {
-      hero.appendChild(App.el("span", { class: "plant-hero__icon", html: App.icon("leaf", 36) }));
+      hero.appendChild(
+        App.el("button", {
+          class: "plant-hero__icon plant-hero__icon--btn",
+          "aria-label": "カバー写真を設定する",
+          html: App.icon(coverUploading ? "clock" : "leaf", 36),
+          onclick: () => { if (!coverUploading) openCoverSheet(p); },
+        })
+      );
     }
     hero.appendChild(
       App.el("div", { class: "plant-hero__caption" }, [

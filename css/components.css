@@ -448,6 +448,7 @@
 .field input[type="text"],
 .field input[type="date"],
 .field input[type="time"],
+.field select,
 .field textarea {
   width: 100%;
   min-height: 48px;
@@ -475,7 +476,7 @@
 .field input[type="date"]::-webkit-calendar-picker-indicator {
   margin-left: auto;
 }
-.field input:focus, .field textarea:focus {
+.field input:focus, .field select:focus, .field textarea:focus {
   outline: none;
   border-color: var(--color-primary);
 }
