@@ -6,6 +6,13 @@ App.screens = App.screens || {};
 
 (function () {
   let tab = "memo"; // "memo" | "diary"
+  // タグでの絞り込み(タブごとに独立。セッション中だけ保持し、タブ切り替えで解除)
+  let tagFilter = null;
+
+  function tagsOf(n) {
+    if (!n.tags) n.tags = [];
+    return n.tags;
+  }
 
   // ---- 新規作成中の下書き(画面を離れても消えないよう端末内に残す。世帯同期はしない) ----
   const DRAFT_KEY = "wagaya-home-note-draft-v1";
@@ -73,7 +80,7 @@ App.screens = App.screens || {};
         clearDraft(type);
         return;
       }
-      saveDraft(type, { noteId, title, body, date: dateInput.value, photos: draftPhotos, savedAt: Date.now() });
+      saveDraft(type, { noteId, title, body, date: dateInput.value, photos: draftPhotos, tags: tagsInput.value, savedAt: Date.now() });
     };
     const commitDraftDebounced = () => {
       if (isEdit) return;
@@ -188,6 +195,26 @@ App.screens = App.screens || {};
       );
     }
 
+    // タグ(スペース区切りで複数。過去に使ったタグはチップから追加できる)
+    const existingTags = [...new Set(App.store.state.notes.flatMap((n) => tagsOf(n)))].sort();
+    const tagsInput = App.el("input", { type: "text", value: isEdit ? tagsOf(note).join(" ") : (draft && draft.tags) || "", placeholder: "例: 学校 病院(スペース区切り)" });
+    tagsInput.addEventListener("input", commitDraftDebounced);
+    const tagFields = [App.field("タグ(任意)", tagsInput)];
+    if (existingTags.length) {
+      tagFields.push(
+        App.el("div", { class: "chip-row", style: "margin-top: var(--spacing-2);" }, existingTags.map((t) =>
+          App.el("button", {
+            class: "chip", type: "button", text: t,
+            onclick: () => {
+              const cur = tagsInput.value.trim().split(/\s+/).filter(Boolean);
+              if (!cur.includes(t)) { cur.push(t); tagsInput.value = cur.join(" "); }
+            },
+          })
+        ))
+      );
+    }
+    content.push(...tagFields);
+
     content.push(saveBtn);
 
     // メモは「やること」に近い内容になることがあるので、ワンタップで移せる導線を置く
@@ -250,10 +277,11 @@ App.screens = App.screens || {};
       s.close();
       clearTimeout(draftSaveTimer);
       if (!isEdit) clearDraft(type);
+      const tags = tagsInput.value.trim().split(/\s+/).filter(Boolean);
       App.store.update((st) => {
         if (isEdit) {
           const n = st.notes.find((x) => x.id === note.id);
-          if (n) Object.assign(n, { title, body, date: isDiary ? dateInput.value : n.date, updatedAt: Date.now() });
+          if (n) Object.assign(n, { title, body, date: isDiary ? dateInput.value : n.date, updatedAt: Date.now(), tags });
         } else {
           st.notes.unshift({
             id: noteId,
@@ -263,6 +291,7 @@ App.screens = App.screens || {};
             date: isDiary ? dateInput.value : App.date.today(),
             updatedAt: Date.now(),
             ...(draftPhotos.length ? { photos: draftPhotos.slice() } : {}),
+            ...(tags.length ? { tags } : {}),
           });
         }
       });
@@ -292,8 +321,25 @@ App.screens = App.screens || {};
       });
       container.appendChild(segment);
 
-      const notes = App.store.state.notes
-        .filter((n) => n.type === tab)
+      // タグ絞り込み(タブ内に1つでもタグが使われていれば出す)
+      const tabNotes = App.store.state.notes.filter((n) => n.type === tab);
+      const allTags = [...new Set(tabNotes.flatMap((n) => tagsOf(n)))].sort();
+      if (allTags.length > 0) {
+        container.appendChild(
+          App.el("div", { class: "section", style: "margin-top: var(--spacing-3);" }, [
+            App.chipSelect(
+              ["すべて", ...allTags],
+              tagFilter || "すべて",
+              (v) => { tagFilter = v === "すべて" ? null : v; App.refresh(); }
+            ),
+          ])
+        );
+      } else {
+        tagFilter = null;
+      }
+
+      const notes = tabNotes
+        .filter((n) => !tagFilter || tagsOf(n).includes(tagFilter))
         .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
       const section = App.el("section", { class: "section", style: "margin-top: 0;" });
@@ -325,6 +371,11 @@ App.screens = App.screens || {};
               n.photos && n.photos.length
                 ? App.el("p", { class: "note-sticky__meta", html: App.icon("camera", 12) + `<span>${n.photos.length}枚</span>` })
                 : null,
+              n.tags && n.tags.length
+                ? App.el("div", { style: "display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--spacing-1);" },
+                    n.tags.map((t) => App.el("span", { class: "badge badge--muted", text: t }))
+                  )
+                : null,
             ])
           );
         });
@@ -346,6 +397,11 @@ App.screens = App.screens || {};
               ]),
               n.photos && n.photos.length
                 ? App.el("img", { src: n.photos[0].url, alt: "", class: "note-card__thumb" })
+                : null,
+              n.tags && n.tags.length
+                ? App.el("div", { style: "display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--spacing-2);" },
+                    n.tags.map((t) => App.el("span", { class: "badge badge--muted", text: t }))
+                  )
                 : null,
             ])
           );
