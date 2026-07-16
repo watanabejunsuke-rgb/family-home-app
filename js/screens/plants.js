@@ -23,6 +23,9 @@ App.screens = App.screens || {};
 
   // 一覧の場所フィルタ(セッション中だけ保持。再読み込みで「すべて」に戻る)
   let placeFilter = null;
+  // 一覧画面のタブ(「うちの植物」/「図鑑」)。図鑑への動線が深いという声を受け、
+  // 別画面への遷移ではなく同じ画面内のタブとして常に見える位置に置く
+  let listTab = "mine"; // "mine" | "pedia"
 
   function fmtShort(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
@@ -502,13 +505,32 @@ App.screens = App.screens || {};
   function renderPlantList(container) {
     const allPlants = App.store.state.plants;
 
+    // 「うちの植物」/「図鑑」タブ(常に画面上部に見える位置に置き、動線の深さをなくす)
+    const segment = App.el("div", { class: "segment", role: "tablist" });
+    [
+      { key: "mine", label: "うちの植物" },
+      { key: "pedia", label: "図鑑" },
+    ].forEach((t) => {
+      segment.appendChild(
+        App.el("button", {
+          class: "segment__btn",
+          role: "tab",
+          "aria-pressed": String(listTab === t.key),
+          text: t.label,
+          onclick: () => { listTab = t.key; App.refresh(); },
+        })
+      );
+    });
+    container.appendChild(App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [segment]));
+
+    if (listTab === "pedia") {
+      App.screens.pedia.render(container);
+      return;
+    }
+
     container.appendChild(
-      App.el("section", { class: "section", style: "margin-top: var(--spacing-4);" }, [
-        App.sectionHeader("うちの植物", {
-          icon: "leaf",
-          actionLabel: "図鑑を見る",
-          onAction: () => App.go("pedia"),
-        }),
+      App.el("section", { class: "section", style: "margin-top: 0;" }, [
+        App.sectionHeader("うちの植物", { icon: "leaf" }),
       ])
     );
 
@@ -688,6 +710,28 @@ App.screens = App.screens || {};
     ]);
     container.appendChild(App.el("section", { class: "section" }, [quickBar]));
 
+    // ---- 図鑑への近道(この植物のページへ。設定の奥に埋もれさせず、常に見える位置に置く) ----
+    if (pedia) {
+      container.appendChild(
+        App.el("section", { class: "section" }, [
+          App.el("div", { class: "card card--lg" }, [
+            App.el("button", {
+              class: "list-row",
+              "aria-label": `「${p.name}」の育て方を図鑑で見る`,
+              onclick: () => App.openPediaFor(pedia.id),
+            }, [
+              App.el("span", { class: "list-row__icon", style: "background: var(--cat-plant-bg); color: var(--cat-plant);", html: App.icon("leaf", 18) }),
+              App.el("span", { class: "list-row__body" }, [
+                App.el("span", { text: "図鑑でこの植物を見る" }),
+                App.el("span", { class: "list-row__sub", text: "育て方・お世話ごよみ" }),
+              ]),
+              App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+            ]),
+          ]),
+        ])
+      );
+    }
+
     // ---- お手入れ予定(あらかじめ日程を決めておくもの) ----
     const careSection = App.el("section", { class: "section" }, [
       App.sectionHeader("お手入れ予定", { icon: "leaf" }),
@@ -823,18 +867,11 @@ App.screens = App.screens || {};
       );
     }
 
-    // ---- 設定(置き場所・周期・図鑑・編集・削除。折りたたみ) ----
+    // ---- 設定(置き場所・周期・編集・削除。折りたたみ。図鑑への近道は上に常設したのでここには置かない) ----
     const settingsCard = App.el("div", { class: "card card--lg", style: "display: none;" }, [
       App.el("p", { class: "plant-settings__row", text: `置き場所:${p.place || "未設定"}` }),
       App.el("p", { class: "plant-settings__row", text: `水やりの間隔:${p.cycleDays}日ごと` }),
       App.el("p", { class: "plant-settings__row", text: `前回の水やり:${App.fmtDate(p.wateredAt, { weekday: false })}` }),
-      pedia
-        ? App.el("button", {
-            class: "section-header__action", style: "margin-top: var(--spacing-3);",
-            html: App.icon("note", 14) + "<span>図鑑でこの植物を見る</span>",
-            onclick: () => App.openPediaFor(pedia.id),
-          })
-        : null,
       App.el("button", {
         class: "btn-secondary", style: "margin-top: var(--spacing-4); width: 100%;",
         html: App.icon("edit", 16) + "<span>植物の情報を編集(削除もこちらから)</span>",
