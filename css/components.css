@@ -642,9 +642,29 @@
 .avatar--sm { width: 28px; height: 28px; font-size: 14px; }
 .avatar--initial { font-size: 18px; font-weight: 700; }
 .avatar--sm.avatar--initial { font-size: 13px; }
+.avatar--photo { background-size: cover; background-position: center; }
 .avatar-stack { display: flex; }
 .avatar-stack .avatar--sm { margin-left: -8px; border: 2px solid var(--color-surface); }
 .avatar-stack .avatar--sm:first-child { margin-left: 0; }
+
+/* ---- 人物の顔写真ピッカー(お友達など。1枚のみの単純な丸型プレビュー) ---- */
+.contact-photo {
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--spacing-2);
+  background-color: var(--color-background);
+  background-size: cover;
+  background-position: center;
+  border: 1.5px dashed var(--color-border);
+  color: var(--color-text-muted);
+  transition: opacity var(--t-fast);
+}
+.contact-photo:not(.is-empty) { border-style: solid; }
+.contact-photo.is-uploading { opacity: 0.5; }
 
 /* ---- スケルトン ---- */
 .skeleton {

@@ -101,8 +101,63 @@ App.screens = App.screens || {};
   // ---- 追加・編集シート ----
   function openContactSheet(contact) {
     const isEdit = !!contact;
+    // 写真アップロードの紐付け先IDとして、新規作成でも保存前から使う(nameInput等と同じ並び)
+    const contactId = isEdit ? contact.id : App.uid();
     const nameInput = App.el("input", { type: "text", value: isEdit ? contact.name : "", placeholder: "例:みーちゃん・ゆうたくん" });
     const birthdayInput = App.el("input", { type: "date", value: isEdit ? (contact.birthday || "") : "" });
+
+    // 顔写真(任意・1枚のみ)。あとで見返すときに「あの子誰だっけ」を防ぐのが狙いなので、
+    // 日記のような複数枚ギャラリーではなくプロフィール写真1枚で十分と判断した
+    let photo = isEdit ? (contact.photo || null) : null;
+    let uploadingPhoto = false;
+    const photoInput = App.el("input", { type: "file", accept: "image/*", style: "display: none;" });
+    const photoPreview = App.el("button", { type: "button", class: "contact-photo", "aria-label": "写真を追加・変更する" });
+    const photoRemoveBtn = App.el("button", {
+      type: "button",
+      class: "section-header__action",
+      style: "margin: 0 auto var(--spacing-4); display: none;",
+      html: App.icon("trash", 14) + "<span>写真を削除</span>",
+    });
+    const syncPhotoUI = () => {
+      photoPreview.classList.toggle("is-empty", !photo);
+      photoPreview.style.backgroundImage = photo ? `url('${photo.url}')` : "none";
+      photoPreview.innerHTML = photo ? "" : App.icon("camera", 24);
+      photoRemoveBtn.style.display = photo ? "" : "none";
+    };
+    syncPhotoUI();
+    photoPreview.addEventListener("click", () => {
+      if (uploadingPhoto) return;
+      if (!App.sync.enabled()) { App.toast("写真の保存には「家族と共有」の設定が必要です", "info"); return; }
+      photoInput.click();
+    });
+    photoInput.addEventListener("change", async () => {
+      const file = photoInput.files && photoInput.files[0];
+      photoInput.value = "";
+      if (!file) return;
+      uploadingPhoto = true;
+      photoPreview.classList.add("is-uploading");
+      try {
+        const base64 = await App.compressImageFile(file);
+        const { id, url } = await App.sync.uploadPhoto(contactId, base64, "image/jpeg", contactId);
+        const prevId = photo && photo.id;
+        photo = { id, url };
+        syncPhotoUI();
+        if (prevId) App.sync.deletePhoto(prevId).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+        App.toast("写真を設定しました", "sparkle");
+      } catch (e) {
+        App.toast("写真をアップロードできませんでした。通信状況を確認してください。", "info");
+      } finally {
+        uploadingPhoto = false;
+        photoPreview.classList.remove("is-uploading");
+      }
+    });
+    photoRemoveBtn.addEventListener("click", () => {
+      const prevId = photo && photo.id;
+      photo = null;
+      syncPhotoUI();
+      if (prevId) App.sync.deletePhoto(prevId).catch(() => { /* サーバー側の削除に失敗しても表示からは消す */ });
+    });
+    const photoField = App.el("div", { style: "text-align: center;" }, [photoPreview, photoInput, photoRemoveBtn]);
 
     // 関係(保育園のクラス・習い事名など)。既にある関係から選ぶか、無ければ新規入力
     const NEW_CONTEXT = "__new__";
@@ -165,7 +220,7 @@ App.screens = App.screens || {};
     if (isEdit && contact.note) noteInput.value = contact.note;
 
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "追加する" });
-    const content = [App.field("呼び方(いつも呼んでいる名前)", nameInput), contextField];
+    const content = [photoField, App.field("呼び方(いつも呼んでいる名前)", nameInput), contextField];
     if (relatedChips) {
       content.push(
         App.el("div", { class: "field" }, [
@@ -209,7 +264,7 @@ App.screens = App.screens || {};
       const note = noteInput.value.trim();
       const birthday = birthdayInput.value || undefined;
       const finalGradeOffset = relatedMemberId && gradeOffset !== "" ? Number(gradeOffset) : undefined;
-      const savedFields = { name, context, note, birthday, relatedMemberId: relatedMemberId || undefined, gradeOffset: finalGradeOffset };
+      const savedFields = { name, context, note, birthday, relatedMemberId: relatedMemberId || undefined, gradeOffset: finalGradeOffset, photo: photo || undefined };
       // 誕生日が新しく登録された/変わった時だけカレンダー追加を案内する(毎回は聞かない)
       const birthdayChanged = !!birthday && (!isEdit || birthday !== (contact.birthday || ""));
       s.close();
@@ -218,7 +273,7 @@ App.screens = App.screens || {};
           const c = contactsOf().find((x) => x.id === contact.id);
           if (c) Object.assign(c, savedFields);
         } else {
-          contactsOf().push({ id: App.uid(), ...savedFields, createdAt: Date.now() });
+          contactsOf().push({ id: contactId, ...savedFields, createdAt: Date.now() });
         }
       });
       App.toast(isEdit ? "変更しました" : `「${name}」を追加しました`);
@@ -253,8 +308,8 @@ App.screens = App.screens || {};
         return;
       }
 
-      // どの子の関係かで絞り込み(ALL + 家族の各メンバー)
-      // ※ chipSelectは空文字を「未選択」として扱ってしまうため、ALLにはダミー値を使う
+      // 2つのフィルタ(誰の関係・どこの関係)は互いに独立させる。選択肢は常に全件(all)から作り、
+      // 一方を切り替えてももう一方の選択肢が入れ替わらない/選択が失われないようにする
       const ALL_VALUE = "__all__";
       const fam = App.store.state.family;
       if (fam.length > 1) {
@@ -269,17 +324,15 @@ App.screens = App.screens || {};
         memberFilter = null;
       }
 
-      const byMember = memberFilter ? all.filter((c) => c.relatedMemberId === memberFilter) : all;
-
-      // 関係での絞り込み(2種類以上あるときだけ出す。※ 対象は「どの子」フィルタ後の一覧から作る)
-      const contexts = [...new Set(byMember.map((c) => c.context || "関係未設定"))].sort();
+      const contexts = [...new Set(all.map((c) => c.context || "関係未設定"))].sort();
       if (contexts.length > 1) {
+        if (contextFilter && !contexts.includes(contextFilter)) contextFilter = null;
         section.appendChild(
           App.el("div", { style: "margin-top: var(--spacing-3);" }, [
             App.chipSelect(
-              ["すべて", ...contexts],
-              contextFilter || "すべて",
-              (v) => { contextFilter = v === "すべて" ? null : v; App.refresh(); }
+              [{ value: ALL_VALUE, label: "ALL" }, ...contexts.map((c) => ({ value: c, label: c }))],
+              contextFilter || ALL_VALUE,
+              (v) => { contextFilter = v === ALL_VALUE ? null : v; App.refresh(); }
             ),
           ])
         );
@@ -287,7 +340,9 @@ App.screens = App.screens || {};
         contextFilter = null;
       }
 
-      const filtered = (contextFilter ? byMember.filter((c) => (c.context || "関係未設定") === contextFilter) : byMember)
+      const filtered = all
+        .filter((c) => !memberFilter || c.relatedMemberId === memberFilter)
+        .filter((c) => !contextFilter || (c.context || "関係未設定") === contextFilter)
         .slice()
         .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ja"));
 
@@ -301,13 +356,16 @@ App.screens = App.screens || {};
         const subParts = [c.context || "関係未設定"];
         if (age) subParts.push(age);
         if (grade) subParts.push(grade);
+        const avatarEl = c.photo
+          ? App.el("span", { class: "avatar avatar--photo", style: `background-image: url('${c.photo.url}');` })
+          : App.el("span", { class: "avatar", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("heart", 18) });
         card.appendChild(
           App.el("button", {
             class: "list-row",
             "aria-label": `${c.name}の情報を編集`,
             onclick: () => openContactSheet(c),
           }, [
-            App.el("span", { class: "list-row__icon", style: "background: var(--cat-family-bg); color: var(--cat-family);", html: App.icon("heart", 18) }),
+            avatarEl,
             App.el("span", { class: "list-row__body" }, [
               App.el("span", { text: c.name }),
               App.el("span", { class: "list-row__sub", text: subParts.join("・") }),
