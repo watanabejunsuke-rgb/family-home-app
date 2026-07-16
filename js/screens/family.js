@@ -28,6 +28,8 @@ App.screens = App.screens || {};
     if (years < 0) return null; // 未来の日付が入っていた場合は表示しない
     return years < 3 ? (months > 0 ? `${years}歳${months}ヶ月` : `${years}歳`) : `${years}歳`;
   }
+  // お友達画面(contacts.js)からも同じ年齢表示を使うため公開する
+  App.ageLabel = ageLabel;
 
   // ---- 成長記録(できるようになったこと・印象的な出来事を自由記述で残す) ----
   function growthLogOf(m) {

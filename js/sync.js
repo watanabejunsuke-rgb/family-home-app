@@ -13,7 +13,7 @@ window.App = window.App || {};
 
 (function () {
   const cfg = () => window.APP_CONFIG || {};
-  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes", "weather"];
+  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes", "weather", "contacts"];
 
   App.sync = {
     _timer: null,

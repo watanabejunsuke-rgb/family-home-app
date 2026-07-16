@@ -243,6 +243,7 @@ App.screens = App.screens || {};
       // ---- 機能一覧 ----
       const links = [
         { label: "家族のようす", icon: "users", cat: "family", route: "family" },
+        { label: "お友達・知り合い", icon: "heart", cat: "family", route: "contacts" },
         { label: "買い物リスト", icon: "cart", cat: "shopping", route: "shopping" },
         { label: "植物の記録", icon: "leaf", cat: "plant", route: "plants" },
         { label: "植物図鑑", icon: "leaf", cat: "plant", route: "pedia" },
