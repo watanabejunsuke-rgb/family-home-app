@@ -116,8 +116,9 @@ App.screens = App.screens || {};
   }
 
   // 「今日やること」を1メッセージに要約する(最優先① — 一瞬で分かることを最重要視)。
-  // 優先度: 水やり目安日 > お手入れ予定(今日/適期/期限すぎ) > 平常時は次に何があるかを添える
-  function heroStatus(p) {
+  // 優先度: 水やり目安日 > お手入れ予定(今日/適期/期限すぎ) > AI相談の次回確認予定日 > 平常時は次に何があるかを添える
+  // consultItems: AI相談履歴(あれば)。fetchConsultations()のキャッシュから渡す
+  function heroStatus(p, consultItems) {
     const today = App.date.today();
     const waterLeft = App.plantDaysLeft(p);
     if (waterLeft <= 0) {
@@ -137,6 +138,14 @@ App.screens = App.screens || {};
         s.badge === "期間すぎ" ? "適期をすぎています" :
         s.badge === "すぎています" ? "予定日をすぎています" : "予定日です";
       return { tone: "warn", headline: `「${c.label}」が${phrase}`, sub: s.period };
+    }
+    const dueCheck = (consultItems || []).find((c) => c.nextCheckDate && c.nextCheckDate <= today);
+    if (dueCheck) {
+      return {
+        tone: "warn",
+        headline: "AI相談で提案された確認予定日です",
+        sub: dueCheck.summary || "様子を見てみましょう",
+      };
     }
     // 平常時:水やりとお手入れ予定のうち、一番近いものを添える
     let sub = `次の水やりまで あと${waterLeft}日`;
@@ -693,7 +702,10 @@ App.screens = App.screens || {};
       return;
     }
 
-    const status = heroStatus(p);
+    // AI相談履歴はステータスの「次回確認予定日」判定にも使うため、状態計算より前に取得しておく
+    if (App.sync && App.sync.enabled && App.sync.enabled()) fetchConsultations(p.id);
+    const consultState = consultCache[p.id];
+    const status = heroStatus(p, consultState && consultState.items);
     const pedia = matchPedia(p);
     const photos = photosOf(p);
     const cover = coverPhotoOf(p);
@@ -873,8 +885,7 @@ App.screens = App.screens || {};
 
     // ---- AI相談履歴(ChatGPTで相談し「保存して」と伝えた内容。書き込みはGPT側のみの読み取り専用) ----
     if (App.sync && App.sync.enabled && App.sync.enabled()) {
-      fetchConsultations(p.id);
-      const cache = consultCache[p.id] || { loading: true, items: [] };
+      const cache = consultState || { loading: true, items: [] };
       const consultSection = App.el("section", { class: "section" }, [
         App.sectionHeader("AI相談履歴", {
           icon: "sparkle",
@@ -896,7 +907,9 @@ App.screens = App.screens || {};
           App.emptyState("sparkle", "まだAI相談の記録はありません", "ChatGPTで相談して「保存して」と伝えると、ここに残ります。")
         );
       } else {
+        const today = App.date.today();
         cache.items.forEach((c) => {
+          const dueCheck = c.nextCheckDate && c.nextCheckDate <= today;
           consultCard.appendChild(
             App.el("button", { class: "list-row", onclick: () => openConsultSheet(c) }, [
               App.el("span", { class: "list-row__icon", style: "background: var(--cat-ai-bg); color: var(--cat-ai);", html: App.icon("sparkle", 18) }),
@@ -904,6 +917,7 @@ App.screens = App.screens || {};
                 App.el("span", { text: c.summary || c.question }),
                 App.el("span", { class: "list-row__sub", text: `${fmtConsultDate(c.consultedAt)}・${CONSULT_CATEGORY_LABEL[c.category] || c.category}` }),
               ]),
+              dueCheck ? App.el("span", { class: "badge badge--warning", text: "確認予定" }) : null,
               App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
             ])
           );

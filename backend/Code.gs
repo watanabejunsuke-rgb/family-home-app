@@ -48,6 +48,7 @@ function doGet(e) {
     verifyConsultToken(e.parameter.token);
     var result;
     if (action === 'listPlants') result = { plants: listPlantsForConsult(e.parameter.query) };
+    else if (action === 'getPlantContext') result = { context: getPlantContextForConsult(e.parameter.plantId) };
     else throw new Error('unknown action: ' + action);
     return json(Object.assign({ ok: true }, result));
   } catch (err) {
@@ -466,6 +467,30 @@ function listPlantsForConsult(query) {
   var q = (query || '').trim();
   var filtered = q ? plants.filter(function (p) { return p.name && p.name.indexOf(q) >= 0; }) : plants;
   return filtered.map(function (p) { return { id: p.id, name: p.name, place: p.place || '' }; });
+}
+
+// 植物カルテ(Phase 3) — 相談開始時にGPTがまず呼ぶことで、過去の相談内容を
+// 毎回ユーザーに説明させずに文脈として引き継げるようにする
+function getPlantContextForConsult(plantId) {
+  if (!plantId) throw new Error('plantIdが必要です');
+  var hh = resolveConsultHousehold();
+  var plants = (hh.data && hh.data.plants) || [];
+  var plant = plants.filter(function (p) { return p.id === plantId; })[0];
+  if (!plant) throw new Error('該当する植物が見つかりません');
+  var rows = readConsultRows().filter(function (r) { return r.plantId === plantId; });
+  rows.sort(function (a, b) { return String(b.consultedAt).localeCompare(String(a.consultedAt)); });
+  var recent = rows.slice(0, 5).map(function (r) {
+    return { consultedAt: r.consultedAt, category: r.category, summary: r.summary, nextCheckDate: r.nextCheckDate || null };
+  });
+  var last = rows[0] || null;
+  return {
+    plant: { id: plant.id, name: plant.name, place: plant.place || '', cycleDays: plant.cycleDays, wateredAt: plant.wateredAt },
+    recentConsultations: recent,
+    lastDiagnosis: last ? (last.diagnosis || '') : '',
+    lastRecommendation: last ? (last.recommendation || '') : '',
+    lastCheckDate: last ? (last.nextCheckDate || null) : null,
+    consultCount: rows.length,
+  };
 }
 
 // 相談を1件保存する。plantId/category/question/answer/summaryは必須(GPT Actionsのスキーマ側でも必須にする)

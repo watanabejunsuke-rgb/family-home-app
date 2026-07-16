@@ -271,10 +271,92 @@ paths:
 
 ---
 
+## 8. Phase 3: 植物カルテ(getPlantContext)を追加する
+
+相談を始めるときに、GPTが「前回どんな相談をしたか」を自動で踏まえてくれるようにする機能。**GAS側のコードは既に対応済み**(`getPlantContext`アクション)なので、ここではChatGPT側の設定を2箇所だけ更新する。
+
+### 8-1. スキーマに`getPlantContext`を追加する
+
+Action編集画面のスキーマに、`listPlants`と同じ`get:`の下に次のオペレーションを追記する(`paths./.get`の中に`listPlants`と並べて追加するイメージ。全体を書き直したい場合は、既存の`listPlants`のブロックをコピーして書き換えるのが早い):
+
+```yaml
+    getPlantContext:
+      operationId: getPlantContext
+      summary: 植物カルテ(基本情報+直近の相談要約+前回診断+前回推奨対応+次回確認日)を取得する
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema: { type: string, enum: [getPlantContext] }
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+          description: 合言葉トークン
+        - name: plantId
+          in: query
+          required: true
+          schema: { type: string }
+          description: listPlantsで調べた対象植物のid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  context:
+                    type: object
+                    properties:
+                      plant:
+                        type: object
+                        properties:
+                          id: { type: string }
+                          name: { type: string }
+                          place: { type: string }
+                          cycleDays: { type: integer }
+                          wateredAt: { type: string }
+                      recentConsultations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            consultedAt: { type: string }
+                            category: { type: string }
+                            summary: { type: string }
+                            nextCheckDate: { type: string }
+                      lastDiagnosis: { type: string }
+                      lastRecommendation: { type: string }
+                      lastCheckDate: { type: string }
+                      consultCount: { type: integer }
+```
+
+> `getPlantContext:`という行のインデントは、既存の`listPlants:`と同じ深さ(`paths: / : get:`の直下)に揃えること。ずれると「有効なOpenAPI仕様を解析できませんでした」になる。不安であれば、スキーマ全体をここに載せた形に丸ごと書き直しても良い。
+
+### 8-2. Instructionsに一文追加する
+
+Instructions欄の、`会話の中で特定の植物が話題になったら〜`の段落の後に、次の一文を追記する:
+
+```
+特定の植物についての相談を始める際は、listPlantsでidが分かった直後に
+getPlantContextを1回呼び、前回までの診断・推奨対応・次回確認予定を
+把握してから回答してください(ユーザーに毎回同じ説明をさせない)。
+```
+
+保存すれば完了。次に同じ植物について相談すると、GPTが「前回、水不足の可能性を指摘しましたが、その後はいかがですか?」のように自分から過去の文脈を踏まえて聞いてくれるようになる。
+
+### 8-3. アプリ側の変化(参考)
+
+植物詳細画面の状態ひとことカードが、AI相談の**次回確認予定日が来ている場合はそれを優先して表示**するようになった(水やり・お手入れ予定がなければ)。あわせて「AI相談履歴」の一覧にも、確認予定日が来ている行に「確認予定」バッジが付く。これはアプリ側の変更のみで、ChatGPT側の追加設定は不要。
+
+---
+
 ## 既知の注意点
 
 - **GASのウェブアプリURLに直接ChatGPT Actionsを向けると、Google側に「ファイルを開けません」というエラーページで弾かれることを確認済みです**(2026-07-16)。ブラウザで直接開く分には問題ないので気づきにくい。手順6のCloudflare Workerを経由させることで解消することを確認しています(GET/POSTとも)。もしWorkerを経由しているのに同じ症状が出る場合は、スキーマの`servers.url`がGASの直リンクのままになっていないか確認してください。
-- `listPlants`・`addConsultation`とも、うちの植物データは「家族と共有」設定（世帯参加）が前提です。世帯未参加の状態だとエラーになります。
-- Phase 1はGPT側からの保存のみです。アプリ内で相談履歴を見られるようにするのはPhase 2（`docs/plan-ai-consult-history.md`参照）で対応予定です。
+- `listPlants`・`addConsultation`・`getPlantContext`とも、うちの植物データは「家族と共有」設定（世帯参加）が前提です。世帯未参加の状態だとエラーになります。
+- Phase 1(GPT側からの保存)・Phase 2(アプリ内での相談履歴閲覧)・Phase 3(植物カルテ・次回確認予定日のリマインド)は2026-07-16時点ですべて実装済みです。次はPhase 4(相談時の写真をDriveに保存、アプリ内AI相談機能との統合)が未着手として残っています。詳細は`docs/plan-ai-consult-history.md`参照。
 - **トークンはInstructions欄に平文で書かれます**。公開範囲を「自分のみ」にしておけば、原則自分以外はInstructionsの中身を見られません。今後もし「リンクを共有」「GPTストアに公開」などを検討する場合は、その前に必ずトークンの扱いを見直してください（token不要の別の認証方式へ切り替える等）。
 - テストで`token`エラーが出た場合は、(1) スクリプトプロパティの`AI_CONSULT_TOKEN`と、(2) Instructions内の`YOUR_TOKEN`を置き換えた値、の2つが一字一句一致しているか確認してください。
