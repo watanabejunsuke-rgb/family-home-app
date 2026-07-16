@@ -175,17 +175,7 @@ App.screens.home = {
         }
         ul.appendChild(
           App.taskItem(t, {
-            onToggle: (task) => {
-              App.store.update((s) => {
-                const x = s.tasks.find((k) => k.id === task.id);
-                if (!x) return;
-                x.done = !x.done;
-                if (x.done) x.doneAt = App.date.today();
-                else delete x.doneAt;
-              });
-              const x = App.store.state.tasks.find((k) => k.id === t.id);
-              if (x && x.done) App.toast("おつかれさま!1件完了しました");
-            },
+            onToggle: App.toggleTask,
             onEdit: App.openTaskSheet,
           })
         );
@@ -210,7 +200,7 @@ App.screens.home = {
             style: "font-size: var(--text-sub); color: var(--color-text-muted); display: flex; align-items: center; gap: var(--spacing-1); margin: 2px 0;",
           }, [
             App.el("span", { style: "color: var(--color-primary); display: inline-flex;", html: App.icon("check", 14) }),
-            App.el("span", { text: d.title }),
+            App.el("span", { text: d.doneBy ? `${d.title}(${d.doneBy})` : d.title }),
           ])
         );
       });

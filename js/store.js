@@ -256,7 +256,7 @@ window.App = window.App || {};
       const t = today();
       const items = [];
       store.state.tasks.forEach((x) => {
-        if (x.done && x.doneAt === t) items.push({ title: x.title });
+        if (x.done && x.doneAt === t) items.push({ title: x.title, doneBy: x.doneBy || null });
       });
       store.state.plants.forEach((p) => {
         if (p.wateredAt === t) items.push({ title: `「${p.name}」に水やり` });
@@ -422,6 +422,27 @@ window.App = window.App || {};
         st.settings.notifSeen = App.data.notifications().map((n) => n.id);
       });
     },
+  };
+
+  // やることの完了・未完了切り替え(ホーム・やること画面の両方から呼ばれる共通処理)。
+  // 完了時は「誰が完了させたか」もメニューの表示名(settings.userName)から記録する
+  // (LINEのボタン操作経由の完了はサーバー側に表示名が無いため付かない)
+  App.toggleTask = function (task) {
+    App.store.update((st) => {
+      const t = st.tasks.find((x) => x.id === task.id);
+      if (!t) return;
+      t.done = !t.done;
+      if (t.done) {
+        t.doneAt = today();
+        if (st.settings.userName) t.doneBy = st.settings.userName;
+        else delete t.doneBy;
+      } else {
+        delete t.doneAt;
+        delete t.doneBy;
+      }
+    });
+    const t = App.store.state.tasks.find((x) => x.id === task.id);
+    if (t && t.done) App.toast("おつかれさま!1件完了しました");
   };
 
   // 植物由来タスクの完了処理(ホーム・やること画面のチェックから呼ばれる)

@@ -118,17 +118,6 @@ App.screens = App.screens || {};
     });
   };
 
-  function toggleTask(task) {
-    App.store.update((st) => {
-      const t = st.tasks.find((x) => x.id === task.id);
-      if (!t) return;
-      t.done = !t.done;
-      if (t.done) t.doneAt = App.date.today();
-      else delete t.doneAt;
-    });
-    const t = App.store.state.tasks.find((x) => x.id === task.id);
-    if (t && t.done) App.toast("おつかれさま!1件完了しました");
-  }
 
   App.screens.tasks = {
     title: "やること",
@@ -195,7 +184,7 @@ App.screens = App.screens || {};
         }
         const t = row.item;
         return App.taskItem(t, {
-          onToggle: toggleTask,
+          onToggle: App.toggleTask,
           onEdit: App.openTaskSheet,
           meta: t.due < today ? `期限:${App.fmtDate(t.due)}(すぎています)` : null,
         });
@@ -203,18 +192,18 @@ App.screens = App.screens || {};
 
       // これから:未来日付
       bucket(`これから(${upcoming.length})`, upcoming, (t) =>
-        App.taskItem(t, { onToggle: toggleTask, onEdit: App.openTaskSheet, meta: App.fmtDate(t.due) })
+        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet, meta: App.fmtDate(t.due) })
       );
 
       // いつでも:期限なし
       bucket(`いつでも(${someday.length})`, someday, (t) =>
-        App.taskItem(t, { onToggle: toggleTask, onEdit: App.openTaskSheet })
+        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet })
       );
 
-      // 完了済み
+      // 完了済み(誰が完了させたか分かれば添える。分担の可視化・感謝の言語化のため)
       if (done.length > 0) {
         bucket(`完了済み(${done.length})`, done, (t) =>
-          App.taskItem(t, { onToggle: toggleTask, onEdit: App.openTaskSheet })
+          App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet, meta: t.doneBy ? `${t.doneBy}が完了` : null })
         );
       }
 

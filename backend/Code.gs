@@ -639,6 +639,18 @@ function whoSuffix(e, family) {
   return names.length ? names.join('・') : null;
 }
 
+// 前日リマインド用の直近成績。resultが手動記録された過去の試合を新しい順に最大3件拾い、
+// ○(win)/●(loss)/△(draw)の記号にして「古い→新しい」の時系列順で返す(無ければnull)
+function recentFormJST(events, beforeDate) {
+  var marks = { win: '○', loss: '●', draw: '△' };
+  var played = (events || [])
+    .filter(function (e) { return e.kind === 'match' && e.result && e.date < beforeDate; })
+    .sort(function (a, b) { return b.date.localeCompare(a.date); })
+    .slice(0, 3)
+    .map(function (e) { return marks[e.result] || '?'; });
+  return played.length ? played.reverse().join('') : null;
+}
+
 // ============================================
 // 天気ひとこと — 気象庁(JMA)の公式API(無料・キー不要)から、印西市が属する
 // 「千葉県北西部」(area code 120010)の今日の降水確率を取ってきて一言にする。
@@ -788,6 +800,7 @@ function buildDigestFlex(data, todayStr, tomorrowStr, prefs, weather) {
       (isMatch ? matchRows : eventRows).push({ text: title + '(' + meta + ')', action: null });
     });
   if (eventRows.length) sections.push({ icon: '📅', label: '予定', rows: eventRows });
+  if (matchRows.length) sections.push({ icon: '⚽', label: '試合', rows: matchRows });
 
   var plantRows = [];
   if (on('plant')) {
@@ -814,16 +827,25 @@ function buildDigestFlex(data, todayStr, tomorrowStr, prefs, weather) {
   }
   if (plantRows.length) sections.push({ icon: '🌱', label: '植物', rows: plantRows });
 
+  // 前日リマインド(充実版) — 今日の試合と混ぜず専用セクションにし、節・会場・直近成績を添える。
+  // 対戦相手のロゴ・順位表は公式の無料APIが無く外部取得はしない(規約上グレーな取得は避ける方針)ので、
+  // 手入力済みのデータ(memo・venue)とアプリ内で記録済みの結果(result)だけで充実させる
+  var tomorrowMatchRows = [];
   if (on('match')) {
     (data.events || [])
       .filter(function (e) { return e.kind === 'match' && e.date === tomorrowStr; })
       .forEach(function (e) {
         var title = e.title.replace(/^⚽\s*/, '');
         var who = whoSuffix(e, data.family);
-        matchRows.push({ text: title + '(明日 ' + (e.time || '') + (who ? '・' + who : '') + ')', action: null });
+        var venueLabel = e.venue === 'away' ? 'アウェイ' : 'ホーム';
+        var lines = [title + '\n明日 ' + (e.time || '時間未定') + '・' + venueLabel + (who ? '・' + who : '')];
+        if (e.memo) lines.push(e.memo);
+        var form = recentFormJST(data.events, tomorrowStr);
+        if (form) lines.push('直近3試合: ' + form + '(古い→新しい)');
+        tomorrowMatchRows.push({ text: lines.join('\n'), action: null });
       });
   }
-  if (matchRows.length) sections.push({ icon: '⚽', label: '試合', rows: matchRows });
+  if (tomorrowMatchRows.length) sections.push({ icon: '⚽', label: '明日は試合です', rows: tomorrowMatchRows });
 
   if (!sections.length && !weather) return null;
 
