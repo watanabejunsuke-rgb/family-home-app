@@ -52,7 +52,7 @@ App.screens = App.screens || {};
   // ---- 追加・編集シート ----
   function openContactSheet(contact) {
     const isEdit = !!contact;
-    const nameInput = App.el("input", { type: "text", value: isEdit ? contact.name : "", placeholder: "例:ゆうたくん" });
+    const nameInput = App.el("input", { type: "text", value: isEdit ? contact.name : "", placeholder: "例:みーちゃん・ゆうたくん" });
     const birthdayInput = App.el("input", { type: "date", value: isEdit ? (contact.birthday || "") : "" });
 
     // 関係(保育園のクラス・習い事名など)。既にある関係から選ぶか、無ければ新規入力
@@ -126,7 +126,7 @@ App.screens = App.screens || {};
     if (isEdit && contact.note) noteInput.value = contact.note;
 
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "追加する" });
-    const content = [App.field("なまえ", nameInput), contextField];
+    const content = [App.field("呼び方(いつも呼んでいる名前)", nameInput), contextField];
     if (relatedChips) {
       content.push(
         App.el("div", { class: "field" }, [
