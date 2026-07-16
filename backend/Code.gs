@@ -20,6 +20,11 @@
 //                              代わりに「Webhook URLの末尾に付けるクエリ文字列」で正当性を確認する。
 //                              適当な英数字の長い文字列を決めてここに設定し、LINE Developersの
 //                              Webhook URL欄には「(このGASのURL)?webhookToken=(同じ文字列)」を登録すること。
+//   AI_CONSULT_TOKEN          … ChatGPT(GPT Actions)からの植物相談の読み書きを許可する合言葉。
+//                              LINEログインを経由できないChatGPT側は、これをリクエストに含めて認証する
+//                              (詳細は backend/plant-consult-gpt-setup.md)。適当な英数字の長い文字列でよい。
+//   AI_CONSULT_HOUSEHOLD_ID   … 任意。世帯が複数ある場合のみ、相談を紐付ける対象の世帯IDを指定する。
+//                              世帯が1件しか無ければ未設定でよい(自動でその世帯を使う)。
 //
 // デプロイ: ウェブアプリ / 実行するユーザー=自分 / アクセスできるユーザー=全員
 // セットアップ手順は backend/README.md を参照。
@@ -34,8 +39,20 @@ var SHEET_NAME = 'households';
 // 同じもの(ドメインliff.line.me固定)。LIFF_IDを変更したらここも変更すること
 var LIFF_URL = 'https://liff.line.me/2010693415-ddc2Kd3X';
 
-function doGet() {
-  return json({ ok: true, service: 'kurashi-note backend', ts: Date.now() });
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (!action) return json({ ok: true, service: 'kurashi-note backend', ts: Date.now() });
+
+  // ChatGPT(GPT Actions)からの読み取り専用アクセス。LINEログインが無いのでトークンで認証する
+  try {
+    verifyConsultToken(e.parameter.token);
+    var result;
+    if (action === 'listPlants') result = { plants: listPlantsForConsult(e.parameter.query) };
+    else throw new Error('unknown action: ' + action);
+    return json(Object.assign({ ok: true }, result));
+  } catch (err) {
+    return json({ ok: false, error: String((err && err.message) || err) });
+  }
 }
 
 function doPost(e) {
@@ -45,6 +62,13 @@ function doPost(e) {
     // LINEのWebhook(postbackボタン操作等)は、アプリ自身のAPI呼び出しと形が違う
     // ({events:[...]}を持つ・idTokenを持たない)ので、先にそちらを判定して分岐する
     if (body.events) return handleLineWebhook(e, body);
+
+    // ChatGPT(GPT Actions)からの植物相談の保存。LINEログインを経由できないため、
+    // idTokenではなく専用トークン(AI_CONSULT_TOKEN)で認証する
+    if (body.action === 'addConsultation') {
+      verifyConsultToken(body.token);
+      return json(Object.assign({ ok: true }, addConsultation(body)));
+    }
 
     var userId = verifyIdToken(body.idToken); // 不正なら例外
     var action = body.action;
@@ -390,6 +414,95 @@ function deletePlantPhoto(userId, fileId) {
     // 既に削除済み・権限エラー等は静かに無視(フロント側の表示からは消える)
   }
   return { deleted: true };
+}
+
+// ============================================
+// AI植物相談(ChatGPT / GPT Actions連携) — Phase 1
+// ChatGPTで相談した内容を「保存」の一操作でスプレッドシート(consultations)に蓄積する。
+// 書き込みはGPT側のみ・ミニアプリは今のところ関与しない(閲覧はPhase 2で追加予定)。
+// 詳細設計: docs/plan-ai-consult-history.md / セットアップ: backend/plant-consult-gpt-setup.md
+// ============================================
+var CONSULT_SHEET_NAME = 'consultations';
+// 列: A id | B plantId | C consultedAt | D category | E question | F answer | G summary
+//     | H diagnosis | I recommendation | J nextCheckDate | K tags(カンマ区切り) | L photoUrls(カンマ区切り)
+//     | M transcript | N source | O createdAt | P updatedAt
+
+// LINEログインを経由できないChatGPT側の認証。合言葉(AI_CONSULT_TOKEN)が一致するかだけを見る
+function verifyConsultToken(token) {
+  var expected = PROP.getProperty('AI_CONSULT_TOKEN');
+  if (!expected) throw new Error('AI_CONSULT_TOKEN が未設定です');
+  if (!token || token !== expected) throw new Error('トークンが正しくありません');
+}
+
+function consultSheet() {
+  var id = PROP.getProperty('SHEET_ID');
+  if (!id) throw new Error('SHEET_ID 未設定');
+  var sh = SpreadsheetApp.openById(id).getSheetByName(CONSULT_SHEET_NAME);
+  if (!sh) throw new Error('シート "' + CONSULT_SHEET_NAME + '" がありません(backend/plant-consult-gpt-setup.md の手順1を参照)');
+  return sh;
+}
+
+// このAPIが対象とする世帯を1つ決める。世帯が1件しか無ければ自動でそれを使い、
+// 複数ある場合だけ AI_CONSULT_HOUSEHOLD_ID での明示指定を必須にする
+// (このアプリは基本的に1家族=1世帯での利用を想定しているため)
+function resolveConsultHousehold() {
+  var rows = readAll(sheet());
+  var explicitId = PROP.getProperty('AI_CONSULT_HOUSEHOLD_ID');
+  if (explicitId) {
+    var found = rows.filter(function (r) { return r.householdId === explicitId; })[0];
+    if (!found) throw new Error('AI_CONSULT_HOUSEHOLD_ID に該当する世帯が見つかりません');
+    return found;
+  }
+  if (rows.length === 0) throw new Error('世帯データがありません(アプリで「家族と共有」を先に設定してください)');
+  if (rows.length > 1) throw new Error('世帯が複数あるため、スクリプトプロパティ AI_CONSULT_HOUSEHOLD_ID で対象を指定してください');
+  return rows[0];
+}
+
+// ChatGPTが相談対象のplantIdを特定するための検索(名前の一部一致)
+function listPlantsForConsult(query) {
+  var hh = resolveConsultHousehold();
+  var plants = (hh.data && hh.data.plants) || [];
+  var q = (query || '').trim();
+  var filtered = q ? plants.filter(function (p) { return p.name && p.name.indexOf(q) >= 0; }) : plants;
+  return filtered.map(function (p) { return { id: p.id, name: p.name, place: p.place || '' }; });
+}
+
+// 相談を1件保存する。plantId/category/question/answer/summaryは必須(GPT Actionsのスキーマ側でも必須にする)
+function addConsultation(payload) {
+  payload = payload || {};
+  if (!payload.plantId) throw new Error('plantIdが必要です');
+  if (!payload.category) throw new Error('categoryが必要です');
+  if (!payload.question) throw new Error('questionが必要です');
+  if (!payload.answer) throw new Error('answerが必要です');
+  if (!payload.summary) throw new Error('summaryが必要です');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sh = consultSheet();
+    var now = new Date().toISOString();
+    var id = 'c-' + Utilities.getUuid();
+    sh.appendRow([
+      id,
+      payload.plantId,
+      payload.consultedAt || now,
+      payload.category,
+      payload.question,
+      payload.answer,
+      payload.summary,
+      payload.diagnosis || '',
+      payload.recommendation || '',
+      payload.nextCheckDate || '',
+      (payload.tags || []).join(','),
+      (payload.photoUrls || []).join(','),
+      payload.transcript || '',
+      payload.source || 'chatgpt',
+      now,
+      now,
+    ]);
+    return { id: id };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ============================================

@@ -96,3 +96,9 @@ Apps Script の **スクリプト プロパティ** に、もう1つ追加:
 ### 動作確認を今すぐ試したい場合
 
 Apps Script エディタの関数選択ドロップダウンで **`sendDailyDigest`** を選んで直接実行すると、朝を待たずに今すぐ送信されます（テスト用）。
+
+---
+
+## 8. AI植物相談（ChatGPT連携）を有効にする — Phase 1
+
+ChatGPTで植物の相談をして「保存して」と言うと、内容がスプレッドシートに蓄積されるようになります。手順は別ファイル [`plant-consult-gpt-setup.md`](./plant-consult-gpt-setup.md) にまとめました（`consultations`シートの追加・トークン設定・ChatGPT側のカスタムGPT作成まで含む、所要15分程度）。
