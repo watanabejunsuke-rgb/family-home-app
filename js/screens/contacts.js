@@ -83,9 +83,8 @@ App.screens = App.screens || {};
     }
 
     // どの子の関係か(任意。学年の相対表示・一覧の絞り込みに使う)
-    // ※ chipSelectは空文字を「未選択」として扱ってしまうため、「指定なし」「不明」にはダミー値を使う
+    // ※ chipSelectは空文字を「未選択」として扱ってしまうため、「指定なし」にはダミー値を使う
     const NONE_VALUE = "__none__";
-    const UNKNOWN_VALUE = "__unknown__";
     const fam = App.store.state.family;
     let relatedMemberId = isEdit ? (contact.relatedMemberId || "") : "";
     const relatedChips = fam.length
@@ -96,29 +95,20 @@ App.screens = App.screens || {};
         )
       : null;
 
-    // 学年(生年月日が分からない時の代わり。対象の子との相対学年を直接選ぶ)
+    // 学年(生年月日が分からない時の代わり。対象の子との相対学年を直接選ぶ)。
+    // 選択肢が多い(上下6学年ずつ)ためチップではなくプルダウン(Bottom Sheet)で表現する
     let gradeOffset = isEdit && contact.gradeOffset !== undefined ? String(contact.gradeOffset) : "";
-    const gradeChips = App.chipSelect(
-      [
-        { value: UNKNOWN_VALUE, label: "不明" },
-        { value: "2", label: "2つ上" }, { value: "1", label: "1つ上" }, { value: "0", label: "同学年" },
-        { value: "-1", label: "1つ下" }, { value: "-2", label: "2つ下" },
-      ],
-      gradeOffset || UNKNOWN_VALUE,
-      (v) => (gradeOffset = v === UNKNOWN_VALUE ? "" : v)
+    const gradeOptions = [{ value: "", label: "不明" }];
+    for (let o = 6; o >= -6; o--) gradeOptions.push({ value: String(o), label: gradeLabel(o) });
+    const gradeField = App.pickerField(
+      "学年(生年月日が分からない場合。対象の子との比較)",
+      gradeOptions,
+      gradeOffset,
+      (v) => (gradeOffset = v),
+      { placeholder: "不明" }
     );
-    const gradeHint = App.el("p", {
-      style: "font-size: var(--text-caption); color: var(--color-text-muted);",
-      text: "↑ 対象の子を選ぶと、学年を選べるようになります",
-    });
-    const gradeField = App.el("div", { class: "field" }, [
-      App.el("span", { class: "field__label", text: "学年(生年月日が分からない場合。対象の子との比較)" }),
-      gradeChips,
-      gradeHint,
-    ]);
     function syncGradeVisibility() {
-      gradeChips.style.display = relatedMemberId ? "" : "none";
-      gradeHint.style.display = relatedMemberId ? "none" : "";
+      gradeField.style.display = relatedMemberId ? "" : "none";
     }
     syncGradeVisibility();
 

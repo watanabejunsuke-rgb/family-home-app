@@ -324,6 +324,53 @@ window.App = window.App || {};
     scrollToSelected(minuteCol, minuteBtns, m, 0);
   }
 
+  // ---- 選択肢一覧から選ぶプルダウン(ネイティブselectは端末ごとに見た目が揺れるため、
+  //      時間選択と同じBottom Sheet型のトリガー+一覧pickerに統一する) ----
+  App.pickerField = function (labelText, options, initialValue, onChange, { placeholder = "選択してください" } = {}) {
+    const norm = (opt) => (opt && typeof opt === "object" ? opt : { value: opt, label: opt });
+    let value = initialValue;
+    const labelOf = (v) => {
+      const found = options.map(norm).find((o) => o.value === v);
+      return found ? found.label : placeholder;
+    };
+    const trigger = App.el("button", {
+      type: "button",
+      class: "time-trigger",
+      html:
+        `<span class="time-trigger__label">${labelOf(value)}</span>` +
+        `<span class="picker-caret">${App.icon("chevron", 16)}</span>`,
+    });
+    trigger.addEventListener("click", () =>
+      openPickerSheet(labelText, options, value, (v) => {
+        value = v;
+        trigger.querySelector(".time-trigger__label").textContent = labelOf(value);
+        onChange(value);
+      })
+    );
+    return App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: labelText }),
+      trigger,
+    ]);
+  };
+
+  function openPickerSheet(title, options, current, onPick) {
+    const norm = (opt) => (opt && typeof opt === "object" ? opt : { value: opt, label: opt });
+    const card = App.el("div", { class: "card card--lg" });
+    options.map(norm).forEach((opt) => {
+      card.appendChild(
+        App.el(
+          "button",
+          { class: "list-row", onclick: () => { s.close(); onPick(opt.value); } },
+          [
+            App.el("span", { class: "list-row__body", text: opt.label }),
+            opt.value === current ? App.el("span", { class: "chevron", html: App.icon("check", 18) }) : null,
+          ].filter(Boolean)
+        )
+      );
+    });
+    const s = App.sheet(title, [card]);
+  }
+
   // メモ付きのタスクは、編集画面を開かなくても内容(URL含む)をすぐ見られるようにする
   function openTaskMemoSheet(task, onEdit) {
     const editBtn = onEdit

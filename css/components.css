@@ -552,6 +552,8 @@
 }
 .time-trigger:active { border-color: var(--color-primary); }
 .time-trigger .icon { color: var(--color-text-muted); }
+.time-trigger__label { flex: 1; }
+.time-trigger .picker-caret { margin-left: auto; display: flex; transform: rotate(90deg); }
 
 .time-picker {
   display: flex;
