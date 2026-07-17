@@ -50,6 +50,24 @@ App.screens = App.screens || {};
 
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "やることを追加" });
 
+    // 担当(任意)。「自分の担当」をホームの「まず確認」に出せるようにする。
+    // 既存のやること(assignedTo無し)は「誰でも」のまま何も変わらない
+    let assignedTo = (isEdit && task.assignedTo) || "";
+    const userName = App.store.state.settings.userName || "";
+    const assigneeField = App.flag("PRIORITY_LAYER") || App.flag("EVENT_ACTIONS")
+      ? App.el("div", { class: "field" }, [
+          App.el("span", { class: "field__label", text: "だれがやる?(任意)" }),
+          App.chipSelect(
+            [
+              { value: "", label: "誰でも" },
+              ...App.store.state.family.map((m) => ({ value: m.id, label: m.name === userName ? `自分(${m.name})` : m.name })),
+            ],
+            assignedTo,
+            (v) => (assignedTo = v)
+          ),
+        ])
+      : null;
+
     const content = [
       App.field("やること", titleInput),
       App.el("div", { class: "field" }, [
@@ -68,6 +86,7 @@ App.screens = App.screens || {};
         ),
       ]),
       dateField,
+      assigneeField,
       memoToggle,
       memoField,
       memoLinkBtn,
@@ -108,10 +127,16 @@ App.screens = App.screens || {};
       App.store.update((st) => {
         if (isEdit) {
           const t = st.tasks.find((x) => x.id === task.id);
-          if (t) Object.assign(t, { title, due, memo });
+          if (t) {
+            Object.assign(t, { title, due, memo });
+            if (assignedTo) t.assignedTo = assignedTo;
+            else delete t.assignedTo;
+          }
         } else {
-          st.tasks.push({ id: App.uid(), title, due, memo, done: false, createdAt: Date.now() });
-          if (opts.onCreate) opts.onCreate(st);
+          const newTask = { id: App.uid(), title, due, memo, done: false, createdAt: Date.now() };
+          if (assignedTo) newTask.assignedTo = assignedTo;
+          st.tasks.push(newTask);
+          if (opts.onCreate) opts.onCreate(st, newTask);
         }
       });
       App.toast(opts.successToast || (isEdit ? "変更しました" : "やることを追加しました"));
@@ -178,6 +203,13 @@ App.screens = App.screens || {};
         );
       }
 
+      // 担当が付いていれば表示メタに添える(未設定なら従来どおり何も足さない)
+      const withAssignee = (t, meta) => {
+        const name = App.data.assigneeName(t.assignedTo);
+        if (!name) return meta;
+        return meta ? `${meta}・担当:${name}` : `担当:${name}`;
+      };
+
       bucket(`今日(${todayItems.length})`, todayItems, (row) => {
         if (row.__plant) {
           return App.taskItem(row.item, { onToggle: App.completePlantCareItem, meta: row.item.meta });
@@ -186,18 +218,18 @@ App.screens = App.screens || {};
         return App.taskItem(t, {
           onToggle: App.toggleTask,
           onEdit: App.openTaskSheet,
-          meta: t.due < today ? `期限:${App.fmtDate(t.due)}(すぎています)` : null,
+          meta: withAssignee(t, t.due < today ? `期限:${App.fmtDate(t.due)}(すぎています)` : null),
         });
       });
 
       // これから:未来日付
       bucket(`これから(${upcoming.length})`, upcoming, (t) =>
-        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet, meta: App.fmtDate(t.due) })
+        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet, meta: withAssignee(t, App.fmtDate(t.due)) })
       );
 
       // いつでも:期限なし
       bucket(`いつでも(${someday.length})`, someday, (t) =>
-        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet })
+        App.taskItem(t, { onToggle: App.toggleTask, onEdit: App.openTaskSheet, meta: withAssignee(t, null) })
       );
 
       // 完了済み(誰が完了させたか分かれば添える。分担の可視化・感謝の言語化のため)

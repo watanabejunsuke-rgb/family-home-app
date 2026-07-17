@@ -133,13 +133,20 @@ App.screens = App.screens || {};
     thisOnlyBtn.addEventListener("click", () => {
       s2.close();
       closeEditSheet();
-      App.store.update((st) => { st.events = st.events.filter((e) => e.id !== ev.id); });
+      App.store.update((st) => {
+        st.events = st.events.filter((e) => e.id !== ev.id);
+        cleanupPrepTasks(st, [ev.id]);
+      });
       App.toast("この日の予定を削除しました", "trash");
     });
     allBtn.addEventListener("click", () => {
       s2.close();
       closeEditSheet();
-      App.store.update((st) => { st.events = st.events.filter((e) => e.seriesId !== ev.seriesId); });
+      App.store.update((st) => {
+        const ids = st.events.filter((e) => e.seriesId === ev.seriesId).map((e) => e.id);
+        st.events = st.events.filter((e) => e.seriesId !== ev.seriesId);
+        cleanupPrepTasks(st, ids);
+      });
       App.toast("くり返しの予定をすべて削除しました", "trash");
     });
     cancelBtn.addEventListener("click", s2.close);
@@ -150,11 +157,241 @@ App.screens = App.screens || {};
   // 「毎年」くり返しの日付生成をcontacts.js(お友達の誕生日登録)からも使えるように公開する
   App.recurDates = recurDates;
 
-  function openEventSheet(ev) {
+  // 予定を消すとき、その予定に紐づく準備タスクを孤立させない共通処理。
+  // 未完了の準備タスクは一緒に消し、完了済みは記録として残す(紐付けだけ外す)
+  function cleanupPrepTasks(st, eventIds) {
+    st.tasks = (st.tasks || []).filter(
+      (t) => !(t.eventId && eventIds.indexOf(t.eventId) >= 0 && t.eventActionType === "preparation" && !t.done)
+    );
+    st.tasks.forEach((t) => {
+      if (t.eventId && eventIds.indexOf(t.eventId) >= 0) delete t.eventId;
+    });
+  }
+
+  // ---- 予定の「準備」ブロック(担当・持ち物・準備タスク・確認状態) ----
+  // 初期状態は折りたたみ。read()で入力内容を回収する(空なら preparation: null)。
+  // 既存の予定に preparation が無くても安全に動く(このアプリの他の新フィールドと同じ扱い)。
+  const PREP_STATUS_OPTIONS = [
+    { value: "unconfirmed", label: "これから" },
+    { value: "confirmed", label: "確認した" },
+    { value: "completed", label: "準備できた" },
+    { value: "skipped", label: "今回はなし" },
+  ];
+
+  function buildPreparationBlock(data, eventId) {
+    const src = data.preparation || {};
+    const prep = {
+      assignedTo: src.assignedTo || "",
+      status: src.status || "unconfirmed",
+      items: (src.items || [])
+        .map((it) => ({ ...it }))
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
+    };
+    const newTasks = []; // 保存時にst.tasksへ追加する準備タスク {title, due, assignedTo}
+    const fam = App.store.state.family;
+    const userName = App.store.state.settings.userName || "";
+
+    // --- 担当 ---
+    const assigneeOptions = [
+      { value: "", label: "担当なし" },
+      { value: "anyone", label: "誰かできる" },
+      ...fam.map((m) => ({ value: m.id, label: m.name === userName ? `自分(${m.name})` : m.name })),
+    ];
+    const assigneeField = App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: "準備の担当" }),
+      App.chipSelect(assigneeOptions, prep.assignedTo, (v) => (prep.assignedTo = v)),
+    ]);
+
+    // --- 持ち物 ---
+    const itemsWrap = App.el("div", {});
+    const renderItems = () => {
+      itemsWrap.innerHTML = "";
+      prep.items.forEach((it, i) => {
+        const check = App.el("button", {
+          type: "button",
+          class: "prep-item__check" + (it.checked ? " is-on" : ""),
+          "aria-label": it.checked ? `「${it.label}」を未確認に戻す` : `「${it.label}」を確認済みにする`,
+          html: App.icon("check", 14),
+          onclick: () => {
+            it.checked = !it.checked;
+            if (it.checked) {
+              it.confirmedBy = userName || null;
+              it.confirmedAt = Date.now();
+            } else {
+              delete it.confirmedBy;
+              delete it.confirmedAt;
+            }
+            renderItems();
+          },
+        });
+        const input = App.el("input", { type: "text", value: it.label, class: "prep-item__input", "aria-label": "持ち物の名前" });
+        input.addEventListener("input", () => (it.label = input.value));
+        const upBtn = App.el("button", {
+          type: "button", class: "prep-item__btn", "aria-label": "上へ移動", html: App.icon("chevron", 14),
+          style: "transform: rotate(-90deg);",
+          onclick: () => {
+            if (i === 0) return;
+            prep.items.splice(i - 1, 0, prep.items.splice(i, 1)[0]);
+            renderItems();
+          },
+        });
+        const downBtn = App.el("button", {
+          type: "button", class: "prep-item__btn", "aria-label": "下へ移動", html: App.icon("chevron", 14),
+          style: "transform: rotate(90deg);",
+          onclick: () => {
+            if (i >= prep.items.length - 1) return;
+            prep.items.splice(i + 1, 0, prep.items.splice(i, 1)[0]);
+            renderItems();
+          },
+        });
+        const delBtn = App.el("button", {
+          type: "button", class: "prep-item__btn", "aria-label": "この持ち物を削除", html: App.icon("x", 14),
+          onclick: () => { prep.items.splice(i, 1); renderItems(); },
+        });
+        const row = App.el("div", { class: "prep-item" }, [check, input, upBtn, downBtn, delBtn]);
+        itemsWrap.appendChild(row);
+        if (it.checked && it.confirmedBy) {
+          itemsWrap.appendChild(
+            App.el("p", { class: "prep-item__meta", text: `${it.confirmedBy}が確認しました` })
+          );
+        }
+      });
+    };
+    renderItems();
+    const itemInput = App.el("input", { type: "text", placeholder: "例:水筒、帽子", "aria-label": "持ち物を追加" });
+    const itemAddBtn = App.el("button", { type: "button", "aria-label": "持ち物をリストに追加", html: App.icon("plus", 20) });
+    const addItem = () => {
+      const label = itemInput.value.trim();
+      if (!label) { itemInput.focus(); return; }
+      prep.items.push({ id: App.uid(), label, checked: false });
+      itemInput.value = "";
+      renderItems();
+    };
+    itemAddBtn.addEventListener("click", addItem);
+    itemInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } });
+    const itemsField = App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: "持ち物" }),
+      itemsWrap,
+      App.el("div", { class: "shopping-add" }, [itemInput, itemAddBtn]),
+    ]);
+
+    // --- 準備タスク(既存tasksへ保存し、eventIdで紐づける) ---
+    const existingTasks = eventId
+      ? App.store.state.tasks.filter((t) => t.eventId === eventId && t.eventActionType === "preparation")
+      : [];
+    const taskListWrap = App.el("div", {});
+    const renderNewTasks = () => {
+      taskListWrap.innerHTML = "";
+      existingTasks.forEach((t) => {
+        taskListWrap.appendChild(
+          App.el("p", { class: "prep-task-row" + (t.done ? " is-done" : "") }, [
+            App.el("span", { style: "display: inline-flex; color: var(--color-primary);", html: App.icon(t.done ? "checkCircle" : "check", 14) }),
+            App.el("span", { text: `${t.title}${t.due ? `(${App.fmtDateShort(t.due)}まで)` : ""}${t.assignedTo && App.data.assigneeName(t.assignedTo) ? `・${App.data.assigneeName(t.assignedTo)}` : ""}` }),
+          ])
+        );
+      });
+      if (existingTasks.length) {
+        taskListWrap.appendChild(
+          App.el("p", { class: "prep-item__meta", text: "内容の変更・完了は「やること」画面からできます。" })
+        );
+      }
+      newTasks.forEach((t, i) => {
+        taskListWrap.appendChild(
+          App.el("p", { class: "prep-task-row" }, [
+            App.el("span", { text: `${t.title}(${App.fmtDateShort(t.due)}まで)` }),
+            App.el("button", {
+              type: "button", class: "prep-item__btn", "aria-label": "この準備タスクを取り消す", html: App.icon("x", 14),
+              onclick: () => { newTasks.splice(i, 1); renderNewTasks(); },
+            }),
+          ])
+        );
+      });
+    };
+    renderNewTasks();
+    const taskTitleInput = App.el("input", { type: "text", placeholder: "例:体操服を洗っておく", "aria-label": "準備タスクの内容" });
+    // 期限の初期値は予定の前日(予定が今日以前なら今日)
+    const defaultTaskDue = () => {
+      const d = new Date((data.date || App.date.today()) + "T00:00:00");
+      d.setDate(d.getDate() - 1);
+      const s = App.date.str(d);
+      return s < App.date.today() ? App.date.today() : s;
+    };
+    const taskDueInput = App.el("input", { type: "date", value: defaultTaskDue() });
+    let taskAssignee = "";
+    const taskAssigneeChips = App.chipSelect(assigneeOptions.filter((o) => o.value !== "anyone"), taskAssignee, (v) => (taskAssignee = v));
+    const taskAddBtn = App.el("button", {
+      type: "button", class: "btn-secondary", style: "margin-top: var(--spacing-2);",
+      html: App.icon("plus", 16) + "<span>この準備タスクを追加</span>",
+      onclick: () => {
+        const title = taskTitleInput.value.trim();
+        if (!title) { taskTitleInput.focus(); App.toast("準備タスクの内容を入力してください", "info"); return; }
+        newTasks.push({ title, due: taskDueInput.value || defaultTaskDue(), assignedTo: taskAssignee || undefined });
+        taskTitleInput.value = "";
+        renderNewTasks();
+      },
+    });
+    const tasksField = App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: "準備タスク(やることに追加されます)" }),
+      taskListWrap,
+      taskTitleInput,
+      App.el("div", { style: "margin-top: var(--spacing-2);" }, [App.field("期限", taskDueInput)]),
+      App.el("div", { class: "field", style: "margin-bottom: 0;" }, [
+        App.el("span", { class: "field__label", text: "だれがやる?" }),
+        taskAssigneeChips,
+      ]),
+      taskAddBtn,
+    ]);
+
+    // --- 確認状態 ---
+    const statusField = App.el("div", { class: "field" }, [
+      App.el("span", { class: "field__label", text: "準備の状態" }),
+      App.chipSelect(PREP_STATUS_OPTIONS, prep.status, (v) => (prep.status = v)),
+    ]);
+
+    const body = App.el("div", { class: "prep-block" }, [assigneeField, itemsField, tasksField, statusField]);
+
+    // 折りたたみ(既に内容がある予定は最初から開く)
+    const hasContent = !!(prep.assignedTo || prep.items.length || existingTasks.length || prep.status !== "unconfirmed");
+    const toggle = App.el("button", {
+      type: "button",
+      class: "section-header__action",
+      "aria-expanded": String(hasContent),
+      html: App.icon("check", 14) + "<span>準備(担当・持ち物)</span>",
+    });
+    body.style.display = hasContent ? "" : "none";
+    toggle.addEventListener("click", () => {
+      const open = body.style.display === "none";
+      body.style.display = open ? "" : "none";
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+
+    return {
+      node: App.el("div", {}, [toggle, body]),
+      read() {
+        const items = prep.items
+          .map((it, i) => ({ ...it, label: (it.label || "").trim(), sortOrder: i }))
+          .filter((it) => it.label);
+        const empty = !prep.assignedTo && !items.length && prep.status === "unconfirmed";
+        return {
+          preparation: empty ? null : { assignedTo: prep.assignedTo || "", status: prep.status, items },
+          newTasks: newTasks.slice(),
+        };
+      },
+    };
+  }
+
+  function openEventSheet(ev, opts) {
+    opts = opts || {};
     const isEdit = !!ev;
+    const prefill = opts.prefill || {};
     const data = ev
       ? { ...ev, memberIds: [...(ev.memberIds || [])] }
-      : { title: "", date: view.selected, time: "", memberIds: App.store.state.family.map((m) => m.id) };
+      : {
+          title: prefill.title || "",
+          date: prefill.date || view.selected || App.date.today(),
+          time: prefill.time || "",
+          memberIds: App.store.state.family.map((m) => m.id),
+        };
 
     const titleInput = App.el("input", { type: "text", value: data.title, placeholder: "例:こた めばえ" });
     const dateInput = App.el("input", { type: "date", value: data.date });
@@ -187,6 +424,25 @@ App.screens = App.screens || {};
       App.el("span", { class: "field__label", text: "予定の色" }),
       App.colorSwatches(color, (v) => (color = v), { includeStandard: true }),
     ]);
+
+    // 大事な予定(まず確認・朝ダイジェストで優先して扱う)。強い警告色は使わない。
+    // フラグOFFのときは欄を出さず、既存の値もそのまま保つ
+    let important = data.important ? "important" : "normal";
+    const importantField = App.flag("PRIORITY_LAYER") || App.flag("EVENT_ACTIONS")
+      ? App.el("div", { class: "field" }, [
+          App.el("span", { class: "field__label", text: "この予定のあつかい" }),
+          App.chipSelect(
+            [{ value: "normal", label: "ふつう" }, { value: "important", label: "大事な予定" }],
+            important,
+            (v) => (important = v)
+          ),
+        ])
+      : null;
+
+    // 予定の「準備」(担当・持ち物・準備タスク)。フラグOFFなら従来どおり何も出さない。
+    // 新規作成でも準備タスクを紐づけられるよう、予定のIDを先に確定しておく
+    const eventId = isEdit ? ev.id : App.uid();
+    const prepBlock = App.flag("EVENT_ACTIONS") ? buildPreparationBlock(data, isEdit ? ev.id : null) : null;
 
     // メモは毎回必要なわけではないので、既に内容がある時だけ最初から開き、
     // 無ければ「メモを追加」を押した時だけ出す(常時表示にして画面を圧迫しない)
@@ -227,10 +483,12 @@ App.screens = App.screens || {};
         memberChips,
       ]),
       colorField,
+      importantField,
       memoToggle,
       memoField,
       memoLinkBtn,
     ];
+    if (prepBlock) content.push(prepBlock.node);
 
     // コメント(TimeTree的な、予定ごとのやり取り。メモが「決まった内容」を書く場所なのに対し、
     // こちらは「持ち物どうする?」のような時系列のやり取りを積み重ねる場所。新規作成時はまだ
@@ -363,6 +621,7 @@ App.screens = App.screens || {};
             s.close();
             App.store.update((st) => {
               st.events = st.events.filter((e) => e.id !== ev.id);
+              cleanupPrepTasks(st, [ev.id]);
             });
             App.toast("予定を削除しました", "trash");
           },
@@ -390,19 +649,62 @@ App.screens = App.screens || {};
       s.close();
       const memo = memoInput.value.trim();
       const endDate = dayMode === "range" ? endDateInput.value : null;
+      const isImportant = important === "important" ? true : undefined;
+      const prepResult = prepBlock ? prepBlock.read() : null;
+      // 準備タスクを既存tasksへ追加する共通処理(eventIdで予定と紐づける。二重登録はしない)
+      const pushPrepTasks = (st, evId) => {
+        if (!prepResult) return;
+        prepResult.newTasks.forEach((t) => {
+          st.tasks.push({
+            id: App.uid(), title: t.title, due: t.due || null, done: false, createdAt: Date.now(),
+            eventId: evId, eventActionType: "preparation", assignedTo: t.assignedTo,
+          });
+        });
+      };
+      const applyPrep = (e) => {
+        if (!prepResult) return;
+        if (prepResult.preparation) e.preparation = prepResult.preparation;
+        else delete e.preparation;
+      };
       App.store.update((st) => {
         if (isEdit) {
           const e = st.events.find((x) => x.id === ev.id);
-          if (e) Object.assign(e, { title, date: dateInput.value, endDate, time, memberIds: data.memberIds, memo, color });
+          if (e) {
+            Object.assign(e, {
+              title, date: dateInput.value, endDate, time,
+              memberIds: data.memberIds, memo, color,
+              important: isImportant, updatedAt: Date.now(),
+            });
+            if (isImportant === undefined) delete e.important;
+            applyPrep(e);
+            pushPrepTasks(st, e.id);
+          }
         } else if (recur === "none") {
-          st.events.push({ id: App.uid(), title, date: dateInput.value, endDate, time, memberIds: data.memberIds, memo, color });
+          const e = { id: eventId, title, date: dateInput.value, endDate, time, memberIds: data.memberIds, memo, color, important: isImportant };
+          if (isImportant === undefined) delete e.important;
+          applyPrep(e);
+          st.events.push(e);
+          pushPrepTasks(st, e.id);
         } else {
+          // くり返しは実体を一括作成する方式。準備(持ち物・準備タスク)は
+          // 初回の1件にだけ付ける(毎回分に複製すると持ち物確認が氾濫するため)
           const seriesId = `series-${App.uid()}`;
-          recurDates(dateInput.value, recur, recurUntilInput.value).forEach((d) => {
-            st.events.push({ id: App.uid(), title, date: d, time, memberIds: data.memberIds, memo, color, seriesId });
+          recurDates(dateInput.value, recur, recurUntilInput.value).forEach((d, i) => {
+            const e = { id: i === 0 ? eventId : App.uid(), title, date: d, time, memberIds: data.memberIds, memo, color, seriesId, important: isImportant };
+            if (isImportant === undefined) delete e.important;
+            if (i === 0) applyPrep(e);
+            st.events.push(e);
           });
+          pushPrepTasks(st, eventId);
         }
       });
+      if (prepResult && (prepResult.preparation || prepResult.newTasks.length) && App.track) {
+        App.track("event_action_added", {
+          itemCount: prepResult.preparation ? prepResult.preparation.items.length : 0,
+          taskCount: prepResult.newTasks.length,
+        });
+      }
+      if (opts.onSaved) opts.onSaved(eventId);
       view.selected = dateInput.value;
       App.toast(isEdit ? "予定を変更しました" : "予定を追加しました");
     });

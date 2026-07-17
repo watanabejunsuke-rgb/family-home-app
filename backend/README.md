@@ -102,3 +102,26 @@ Apps Script エディタの関数選択ドロップダウンで **`sendDailyDige
 ## 8. AI植物相談（ChatGPT連携）を有効にする — Phase 1
 
 ChatGPTで植物の相談をして「保存して」と言うと、内容がスプレッドシートに蓄積されるようになります。手順は別ファイル [`plant-consult-gpt-setup.md`](./plant-consult-gpt-setup.md) にまとめました（`consultations`シートの追加・トークン設定・ChatGPT側のカスタムGPT作成まで含む、所要15分程度）。
+
+---
+
+## 9. v0.36.0の新機能（LINEインボックス・月200通クォータ・利用計測）を有効にする
+
+**新しいCode.gsを貼り直しただけでは何も変わりません**（新機能はすべてフラグOFF=従来動作が既定）。有効にする手順・テスト・ロールバックは [`../docs/setup-v0.36-priority-inbox-quota.md`](../docs/setup-v0.36-priority-inbox-quota.md) にまとめました。概要だけ書くと:
+
+1. 新しい `backend/Code.gs` をGASに貼り付けて保存
+2. エディタで **`setupNewFeatures`** を1回実行（`message_quota` / `line_message_log` / `webhook_events` / `product_events` シートを作成。何度実行しても壊れない）
+3. スクリプトプロパティにフラグを追加（有効にしたいものだけ）:
+
+| プロパティ | 値 | 効果 |
+|---|---|---|
+| `FLAG_LINE_MESSAGE_QUOTA` | `true` | 月200通クォータの管理（共通送信・送信ログ・自動抑制） |
+| `FLAG_LINE_INBOX` | `true` | LINEで送ったテキストの受信（家族インボックス） |
+| `FLAG_PRODUCT_ANALYTICS` | `true` | 匿名の利用計測（`product_events`） |
+| `QUOTA_COUNT_REPLIES` | 任意 | `false`で返信をクォータに数えない（既定は数える=安全側） |
+| `QUOTA_MONTHLY_LIMIT` | 任意 | 月の上限通数の上書き（既定200） |
+
+4. **デプロイを管理 → 編集 → 新しいバージョン** で再デプロイ（これを忘れると公開URLに反映されない）
+5. LINE DevelopersのMessaging API設定でWebhookが有効なことを確認（URLは従来と同じ `…/exec?webhookToken=…` 形式。**テキスト受信のために応答メッセージはオフのまま**でよい）
+
+> クォータのフラグをONにしたのに `setupNewFeatures` を実行していない場合、送信は**安全側（送らない）**に倒れます。朝ダイジェストが届かなくなったらまずここを疑ってください。

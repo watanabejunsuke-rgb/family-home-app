@@ -23,6 +23,9 @@ window.App = window.App || {};
   let uidCounter = 0;
   App.uid = () => `id-${Date.now().toString(36)}-${(uidCounter++).toString(36)}`;
 
+  // 機能フラグ(js/config.jsのFEATURE_FLAGS)。未定義キーはfalse扱い
+  App.flag = (name) => !!((window.APP_CONFIG || {}).FEATURE_FLAGS || {})[name];
+
   // ---- モックシード(初回起動時のみ投入) ----
   function seed() {
     return {
@@ -334,6 +337,20 @@ window.App = window.App || {};
       });
     },
 
+    // 担当メンバーの名前(assignedToのmemberIdから)。見つからなければnull
+    assigneeName(memberId) {
+      if (!memberId) return null;
+      const m = this.member(memberId);
+      return m ? m.name : null;
+    },
+
+    // LINEインボックスの未整理項目(pending=候補待ち・later=あとで整理)。新しい順
+    inboxPending() {
+      return (store.state.inboxItems || [])
+        .filter((i) => i.status === "pending" || i.status === "later")
+        .sort((a, b) => (b.receivedAt || 0) - (a.receivedAt || 0));
+    },
+
     // お知らせ(アプリ内通知)— 今日/期限まわりの「気づいてほしい」項目を集約する。
     // settings.notifPrefs で種類ごとにオン・オフ(未設定なら全部オン)。
     // 実データから毎回導出するので、完了・水やり等で対応すると自然に消える。
@@ -407,6 +424,94 @@ window.App = window.App || {};
           );
       }
 
+      // ---- ここから拡張分(静かに気づける材料。フラグOFFなら一切追加しない) ----
+      const tomorrowStr = App.date.daysAhead(1);
+      const yesterdayMs = new Date(t + "T00:00:00").getTime() - 86400000;
+
+      if (App.flag("LINE_INBOX")) {
+        // 未整理インボックス(件数だけの1行にまとめる)
+        const pending = this.inboxPending();
+        if (pending.length) {
+          list.push({
+            id: "inbox-pending-" + t,
+            cat: "note", icon: "note",
+            title: `LINEから届いたメモが${pending.length}件あります`,
+            meta: "タップして整理できます",
+            route: "inbox",
+          });
+        }
+      }
+
+      if (App.flag("EVENT_ACTIONS")) {
+        store.state.events.forEach((e) => {
+          const p = e.preparation;
+          // 持ち物未確認(今日・明日の予定)
+          if (p && (p.items || []).some((it) => !it.checked) && p.status !== "completed" && p.status !== "skipped") {
+            if (this.eventCoversDate(e, t) || this.eventCoversDate(e, tomorrowStr)) {
+              list.push({
+                id: "prep-" + e.id,
+                cat: "event", icon: "calendar",
+                title: `「${e.title}」の持ち物`,
+                meta: "確認していないものがあります",
+                route: "calendar",
+              });
+            }
+          }
+          // 担当未定の重要予定(3日先まで)
+          if (e.important && (!p || !p.assignedTo) && e.date >= t && e.date <= App.date.daysAhead(3)) {
+            list.push({
+              id: "unassigned-" + e.id,
+              cat: "event", icon: "users",
+              title: `「${e.title}」の準備`,
+              meta: "だれがやるか決まっていません",
+              route: "calendar",
+            });
+          }
+        });
+      }
+
+      if (App.flag("PRIORITY_LAYER")) {
+        // 期限が近い(明日まで)のやること
+        if (on("task")) {
+          store.state.tasks
+            .filter((x) => !x.done && x.due === tomorrowStr)
+            .forEach((x) =>
+              list.push({
+                id: "task-soon-" + x.id,
+                cat: "task", icon: "check", title: x.title,
+                meta: "明日が期限", route: "tasks",
+              })
+            );
+        }
+        // 昨日以降に変更された今日の予定
+        this.todayEvents().forEach((e) => {
+          if (e.updatedAt && e.updatedAt >= yesterdayMs) {
+            list.push({
+              id: "changed-" + e.id + "-" + e.updatedAt,
+              cat: "event", icon: "calendar",
+              title: e.title.replace(/^⚽\s*/, ""),
+              meta: "昨日から内容に変更があります",
+              route: "calendar",
+            });
+          }
+        });
+      }
+
+      // クォータ等でLINE送信を控えた通知(GASがnotificationCenterへ書き込む)。
+      // 古いものはノイズになるため直近7日分だけ表示する
+      const weekAgoMs = Date.now() - 7 * 86400000;
+      ((store.state.notificationCenter || [])).forEach((n) => {
+        if (!n || !n.title) return;
+        if (n.createdAt && n.createdAt < weekAgoMs) return;
+        list.push({
+          id: "nc-" + (n.id || n.createdAt),
+          cat: "info", icon: "bell",
+          title: n.title,
+          meta: n.meta || "LINEには送らずここにお知らせしています",
+          route: n.route || "home",
+        });
+      });
+
       return list;
     },
 
@@ -443,6 +548,10 @@ window.App = window.App || {};
     });
     const t = App.store.state.tasks.find((x) => x.id === task.id);
     if (t && t.done) App.toast("おつかれさま!1件完了しました");
+    // 準備タスク(予定に紐づくやること)の完了は匿名の利用計測にだけ数える(本文は送らない)
+    if (t && t.done && t.eventActionType === "preparation" && App.track) {
+      App.track("event_action_completed", {});
+    }
   };
 
   // 植物由来タスクの完了処理(ホーム・やること画面のチェックから呼ばれる)

@@ -735,3 +735,122 @@
   transition: transform var(--t-fast);
 }
 .switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+/* ---- ホーム「まず確認」(v0.36.0) ----
+   強い警告色は使わず、理由をピル・操作をテキストボタンで静かに見せる */
+.priority-card {
+  padding: var(--spacing-4);
+  margin-bottom: var(--spacing-2);
+}
+.priority-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-2);
+}
+.priority-card__reason {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border-radius: var(--radius-full);
+  padding: 2px 10px;
+}
+.priority-card__time {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+}
+.priority-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-3);
+}
+.priority-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+  word-break: break-word;
+}
+.priority-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+.priority-card__btn {
+  min-height: var(--tap-target);
+  padding: 0 var(--spacing-4);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sub);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  transition: background var(--t-fast);
+}
+.priority-card__btn--primary {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.priority-card__btn--primary:active { background: var(--color-primary-strong); }
+
+/* ---- 予定の「準備」ブロック(v0.36.0) ---- */
+.prep-block {
+  border-top: 1px solid var(--color-divider);
+  margin-top: var(--spacing-3);
+  padding-top: var(--spacing-3);
+}
+.prep-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  margin-bottom: var(--spacing-1);
+}
+.prep-item__check {
+  flex-shrink: 0;
+  width: var(--tap-target);
+  height: var(--tap-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border);
+  color: transparent;
+  background: var(--color-surface);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.prep-item__check.is-on {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.prep-item__input {
+  flex: 1;
+  min-width: 0;
+}
+.prep-item__btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: var(--tap-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+.prep-item__meta {
+  font-size: var(--text-caption);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--spacing-2) calc(var(--tap-target) + var(--spacing-1));
+}
+.prep-task-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--text-sub);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-1) 0;
+}
+.prep-task-row.is-done { color: var(--color-text-muted); text-decoration: line-through; }

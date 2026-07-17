@@ -83,6 +83,117 @@ App.screens.home = {
       );
     }
 
+    // ---- 0. まず確認(最大3件。候補がなければセクションごと出さない) ----
+    // 候補の選び方はjs/priority.jsの純粋関数に集約。ここは表示と操作だけを担当する。
+    // ここに出したやること・植物は、下の「今日やること」から除いて二重表示を防ぐ
+    const priorityShownRefs = new Set();
+    if (App.flag("PRIORITY_LAYER")) {
+      const hidden = App.priority.hiddenSet(st);
+      const candidates = App.priority.collect(st, { hidden, limit: 3 });
+      if (candidates.length > 0) {
+        candidates.forEach((c) => priorityShownRefs.add(c.refType + ":" + c.refId));
+        // 表示の計測は1日1回だけ(件数のみ。内容は送らない)
+        if (st.settings.priorityShownDate !== App.date.today()) {
+          st.settings.priorityShownDate = App.date.today();
+          App.store.saveLocal();
+          if (App.track) App.track("priority_card_shown", { count: candidates.length });
+        }
+
+        const prioritySection = App.el("section", { class: "section" }, [
+          App.sectionHeader("まず確認", { icon: "sparkle" }),
+        ]);
+        candidates.forEach((c) => {
+          const actions = [];
+          const btn = (label, onclick, primary) =>
+            App.el("button", { class: primary ? "priority-card__btn priority-card__btn--primary" : "priority-card__btn", text: label, onclick });
+          const hideAnd = (kind, trackName) => {
+            App.priority.hide(c.key, kind);
+            if (App.track) App.track(trackName, { kind: c.kind });
+          };
+          const me = App.priority.myMemberId(st);
+
+          if (c.refType === "task") {
+            actions.push(btn("完了", () => {
+              if (App.track) App.track("priority_card_completed", { kind: c.kind });
+              App.toggleTask(c.task);
+            }, true));
+            if (me && !c.task.assignedTo) {
+              actions.push(btn("自分がやる", () => {
+                App.store.update((x) => {
+                  const t = x.tasks.find((k) => k.id === c.task.id);
+                  if (t) t.assignedTo = me;
+                });
+                App.toast("あなたの担当にしました");
+              }));
+            } else {
+              actions.push(btn("詳細を見る", () => App.openTaskSheet(c.task)));
+            }
+          } else if (c.refType === "plant") {
+            actions.push(btn("完了", () => {
+              if (App.track) App.track("priority_card_completed", { kind: c.kind });
+              App.completePlantCareItem(c.plant);
+            }, true));
+          } else if (c.kind === "event-unassigned" && me) {
+            actions.push(btn("自分がやる", () => {
+              App.store.update((x) => {
+                const e = x.events.find((k) => k.id === c.event.id);
+                if (!e) return;
+                if (!e.preparation) e.preparation = { assignedTo: "", status: "unconfirmed", items: [] };
+                e.preparation.assignedTo = me;
+              });
+              if (App.track) App.track("event_action_claimed", {});
+              App.toast("あなたの担当にしました");
+            }, true));
+            actions.push(btn("詳細を見る", () => openEventDetailSheet(c.event)));
+          } else {
+            actions.push(btn("確認した", () => hideAnd("confirm", "priority_card_confirmed"), true));
+            actions.push(btn("詳細を見る", () => (c.kind === "prep-items" ? App.openEventSheet(c.event) : openEventDetailSheet(c.event))));
+          }
+          actions.push(btn("今日は見送る", () => hideAnd("dismiss", "priority_card_dismissed")));
+
+          prioritySection.appendChild(
+            App.el("div", { class: "card priority-card" }, [
+              App.el("div", { class: "priority-card__head" }, [
+                App.el("span", { class: "priority-card__reason", text: c.reason }),
+                App.el("span", { class: "priority-card__time", text: c.timeLabel }),
+              ]),
+              App.el("div", { class: "priority-card__title-row" }, [
+                App.el("p", { class: "priority-card__title", text: c.title }),
+                c.memberIds && c.memberIds.length ? App.memberBadges({ memberIds: c.memberIds }) : null,
+              ]),
+              App.el("div", { class: "priority-card__actions" }, actions),
+            ])
+          );
+        });
+        container.appendChild(prioritySection);
+      }
+    }
+
+    // ---- 0.5 LINEから届いた未整理のメモ(あれば静かに1行だけ) ----
+    if (App.flag("LINE_INBOX")) {
+      const pending = App.data.inboxPending();
+      if (pending.length > 0) {
+        container.appendChild(
+          App.el("section", { class: "section" }, [
+            App.el("div", { class: "card card--lg" }, [
+              App.el("button", {
+                class: "list-row",
+                "aria-label": `LINEから届いたメモ${pending.length}件を整理する`,
+                onclick: () => App.go("inbox"),
+              }, [
+                App.el("span", { class: "list-row__icon", style: "background: var(--cat-note-bg); color: var(--cat-note);", html: App.icon("note", 18) }),
+                App.el("span", { class: "list-row__body" }, [
+                  App.el("span", { text: `LINEから届いたメモ(${pending.length}件)` }),
+                  App.el("span", { class: "list-row__sub", text: pending[0].text.length > 20 ? pending[0].text.slice(0, 20) + "…" : pending[0].text }),
+                ]),
+                App.el("span", { class: "chevron", html: App.icon("chevron", 16) }),
+              ]),
+            ]),
+          ])
+        );
+      }
+    }
+
     // ---- 1. 今日の予定 ----
     const scheduleSection = App.el("section", { class: "section" }, [
       App.sectionHeader("今日の予定", {
@@ -162,8 +273,14 @@ App.screens.home = {
         onAction: () => App.go("tasks"),
       }),
     ]);
-    // 植物のお世話(水やり期限・お手入れ適期)を先頭に自動合流させる
-    const todays = [...App.data.plantCareItems(), ...App.data.todayTasks()].slice(0, 5);
+    // 植物のお世話(水やり期限・お手入れ適期)を先頭に自動合流させる。
+    // 「まず確認」にすでに出した項目は、ここでは重複させない
+    const todays = [...App.data.plantCareItems(), ...App.data.todayTasks()]
+      .filter((t) => {
+        const ref = t.kind ? "plant:" + t.id : "task:" + t.id;
+        return !priorityShownRefs.has(ref);
+      })
+      .slice(0, 5);
     const taskCard = App.el("div", { class: "card card--lg" });
     if (todays.length === 0) {
       taskCard.appendChild(

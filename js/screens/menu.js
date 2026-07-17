@@ -70,7 +70,12 @@ App.screens = App.screens || {};
           danger: true,
           onOk: () => {
             s.close();
-            App.store.update((st2) => { st2.events = st2.events.filter((e) => e.id !== match.id); });
+            App.store.update((st2) => {
+              st2.events = st2.events.filter((e) => e.id !== match.id);
+              // 準備タスクを孤立させない(未完了は削除・完了済みは紐付けだけ外す)
+              st2.tasks = (st2.tasks || []).filter((t) => !(t.eventId === match.id && t.eventActionType === "preparation" && !t.done));
+              st2.tasks.forEach((t) => { if (t.eventId === match.id) delete t.eventId; });
+            });
             App.toast("削除しました", "trash");
           },
         });
@@ -241,9 +246,13 @@ App.screens = App.screens || {};
       );
 
       // ---- 機能一覧 ----
+      const inboxCount = App.flag("LINE_INBOX") ? App.data.inboxPending().length : 0;
       const links = [
         { label: "家族のようす", icon: "users", cat: "family", route: "family" },
         { label: "お友達・知り合い", icon: "heart", cat: "family", route: "contacts" },
+        ...(App.flag("LINE_INBOX")
+          ? [{ label: "未整理(LINEから届いたメモ)", icon: "note", cat: "note", route: "inbox", sub: inboxCount ? `${inboxCount}件が整理を待っています` : "いまは何もありません" }]
+          : []),
         { label: "買い物リスト", icon: "cart", cat: "shopping", route: "shopping" },
         { label: "植物の記録", icon: "leaf", cat: "plant", route: "plants" },
         { label: "植物図鑑", icon: "leaf", cat: "plant", route: "pedia" },
@@ -334,58 +343,160 @@ App.screens = App.screens || {};
       if (!st.settings.notifPrefs) st.settings.notifPrefs = {};
       const prefs = st.settings.notifPrefs;
 
-      const cats = [
-        { key: "event", label: "予定", sub: "今日の予定", icon: "calendar", cat: "calendar" },
-        { key: "task", label: "やること", sub: "期限切れ・今日まで", icon: "check", cat: "task" },
-        { key: "plant", label: "植物のお世話", sub: "水やり・お手入れ適期", icon: "leaf", cat: "plant" },
-        { key: "match", label: "応援チームの試合", sub: "今日・前日のお知らせ", icon: "heart", cat: "family" },
-      ];
+      // defOn=trueの項目は「未設定ならオン」、falseは「未設定ならオフ」。
+      // 新しく増えた通知は、初期値で通知が増えないようすべてdefOn:falseにしてある
+      const prefOn = (key, defOn) => (defOn ? prefs[key] !== false : prefs[key] === true);
 
-      const card = App.el("div", { class: "card card--lg" });
-      cats.forEach((c) => {
-        const isOn = prefs[c.key] !== false;
+      const toggleRow = (c) => {
+        const isOn = prefOn(c.key, c.defOn !== false);
         const sw = App.el("button", {
           class: "switch",
           role: "switch",
           "aria-checked": String(isOn),
-          "aria-label": `${c.label}のお知らせ`,
+          "aria-label": `${c.label}`,
           onclick: () => {
             App.store.update((x) => {
               if (!x.settings.notifPrefs) x.settings.notifPrefs = {};
-              x.settings.notifPrefs[c.key] = x.settings.notifPrefs[c.key] === false;
+              x.settings.notifPrefs[c.key] = !isOn;
             });
-            // ホームのベルだけでなく、LINEプッシュ(毎朝のダイジェスト)にも
-            // 本人の設定として反映されるようサーバーへ送る
+            // ホームのベルだけでなく、LINEプッシュにも本人の設定として反映されるようサーバーへ送る
             if (App.sync && App.sync.pushNotifPrefs) App.sync.pushNotifPrefs();
           },
         });
-        card.appendChild(
-          App.el("div", { class: "list-row" }, [
-            App.el("span", { class: "list-row__icon", style: `background: var(--cat-${c.cat}-bg); color: var(--cat-${c.cat});`, html: App.icon(c.icon, 18) }),
-            App.el("span", { class: "list-row__body" }, [
-              App.el("span", { text: c.label }),
-              App.el("span", { class: "list-row__sub", text: c.sub }),
-            ]),
-            sw,
-          ])
-        );
-      });
+        return App.el("div", { class: "list-row" }, [
+          App.el("span", { class: "list-row__icon", style: `background: var(--cat-${c.cat || "calendar"}-bg); color: var(--cat-${c.cat || "calendar"});`, html: App.icon(c.icon || "bell", 18) }),
+          App.el("span", { class: "list-row__body" }, [
+            App.el("span", { text: c.label }),
+            App.el("span", { class: "list-row__sub", text: c.sub }),
+          ]),
+          sw,
+        ]);
+      };
 
+      const cats = [
+        { key: "event", label: "予定", sub: "今日の予定", icon: "calendar", cat: "calendar", defOn: true },
+        { key: "task", label: "やること", sub: "期限切れ・今日まで", icon: "check", cat: "task", defOn: true },
+        { key: "plant", label: "植物のお世話", sub: "水やり・お手入れ適期", icon: "leaf", cat: "plant", defOn: true },
+        { key: "match", label: "応援チームの試合", sub: "今日・前日のお知らせ", icon: "heart", cat: "family", defOn: true },
+      ];
+      const card = App.el("div", { class: "card card--lg" });
+      cats.forEach((c) => card.appendChild(toggleRow(c)));
       container.appendChild(
         App.el("section", { class: "section" }, [App.sectionHeader("お知らせに出す種類", { icon: "bell" }), card])
       );
+
+      // ---- LINEに届く通知(月200通の無料枠内でやりくりする分) ----
+      // フラグが全部OFFのときは従来の画面のまま(このセクションごと出さない)
+      const showLineSection = App.flag("LINE_MESSAGE_QUOTA") || App.flag("LINE_INBOX") || App.flag("PRIORITY_LAYER");
+      const lineCats = [
+        { key: "digest", label: "朝ダイジェスト", sub: "朝に今日の予定・やることを1通", icon: "sun", cat: "calendar", defOn: true },
+        { key: "importantOnly", label: "重要日だけ受け取る", sub: "大事な予定がある日だけに絞る", icon: "calendar", cat: "calendar", defOn: false },
+        { key: "evening", label: "夜のお知らせ", sub: "明日の準備の見直し", icon: "bell", cat: "note", defOn: false },
+        { key: "immediate", label: "すぐのお知らせ", sub: "予定の変更などをその場で", icon: "bell", cat: "calendar", defOn: false },
+        { key: "assigned", label: "担当になった時", sub: "自分が担当になったら知らせる", icon: "users", cat: "family", defOn: false },
+        { key: "shoppingNotify", label: "買い物のお知らせ", sub: "リストの追加・更新", icon: "cart", cat: "shopping", defOn: false },
+        { key: "completionShare", label: "完了の共有", sub: "家族がやることを終えた時", icon: "check", cat: "task", defOn: false },
+        { key: "inboxReply", label: "LINE登録時の短い返信", sub: "「買い物:牛乳」等の登録の確認", icon: "note", cat: "note", defOn: false },
+        { key: "autoSuppress", label: "上限が近い時は自動でひかえる", sub: "月の無料枠を守るための調整", icon: "settings", cat: "ai", defOn: true },
+      ];
+      if (showLineSection) {
+        const lineCard = App.el("div", { class: "card card--lg" });
+        lineCats.forEach((c) => lineCard.appendChild(toggleRow(c)));
+        container.appendChild(
+          App.el("section", { class: "section" }, [App.sectionHeader("LINEに届く通知", { icon: "send" }), lineCard])
+        );
+      }
+
       container.appendChild(
         App.el("section", { class: "section" }, [
           App.el("div", { class: "card card--lg" }, [
             App.el("p", {
               style: "font-size: var(--text-sub); color: var(--color-text-secondary); line-height: var(--line-height);",
-              html: "オンにした種類が、ホーム右上のベル(お知らせ)と、毎朝届くLINEの通知の両方に反映されます。",
+              html: showLineSection
+                ? "上の設定はこの端末のあなたにだけ効きます(家族それぞれが自分の好みで選べます)。LINEの無料プランは月200通までのため、上限が近づくと優先度の低いお知らせは自動でアプリ内のお知らせに切り替わります。"
+                : "オンにした種類が、ホーム右上のベル(お知らせ)と、毎朝届くLINEの通知の両方に反映されます。",
             }),
           ]),
         ])
       );
+
+      // ---- LINE通知の利用状況(世帯の管理者=最初に世帯を作った人だけに表示) ----
+      if (App.flag("LINE_MESSAGE_QUOTA") && st.settings.isHouseholdAdmin && App.sync && App.sync.enabled && App.sync.enabled()) {
+        const statusBtn = App.el("button", {
+          class: "btn-secondary",
+          html: App.icon("info", 16) + "<span>今月の利用状況を見る</span>",
+        });
+        statusBtn.addEventListener("click", async () => {
+          statusBtn.setAttribute("disabled", "");
+          try {
+            const r = await App.sync.call("getQuotaStatus", {});
+            const q = r.quota || {};
+            const rows = [
+              ["今月の送信", `${q.sent || 0}通 / ${q.limit || 200}通`],
+              ["残り", `${q.remaining !== undefined ? q.remaining : "-"}通`],
+              ["ひかえた通知", `${q.suppressed || 0}件(アプリ内お知らせへ)`],
+              ["いちばん多い用途", q.topPurpose ? quotaPurposeLabel(q.topPurpose) : "まだありません"],
+              ["リセット", `${q.month || "-"}の月末まで`],
+              ["状態", q.level === "critical" ? "上限がとても近いです" : q.level === "warning" ? "上限が近づいています" : "ゆとりがあります"],
+            ];
+            const card2 = App.el("div", { class: "card card--lg" });
+            rows.forEach(([label, value]) => {
+              card2.appendChild(
+                App.el("div", { class: "list-row", style: "min-height: 44px;" }, [
+                  App.el("span", { class: "list-row__body", text: label }),
+                  App.el("span", { class: "badge badge--muted", text: value }),
+                ])
+              );
+            });
+            const byPurpose = q.byPurpose || {};
+            const purposeLines = Object.keys(byPurpose).map((k) => `${quotaPurposeLabel(k)}:${byPurpose[k]}通`);
+            App.sheet("今月のLINE通知", [
+              card2,
+              purposeLines.length
+                ? App.el("p", {
+                    style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-top: var(--spacing-3);",
+                    text: `用途別:${purposeLines.join(" / ")}`,
+                  })
+                : null,
+            ].filter(Boolean));
+          } catch (e) {
+            App.toast("利用状況を取得できませんでした。あとでもう一度お試しください。", "info");
+          } finally {
+            statusBtn.removeAttribute("disabled");
+          }
+        });
+        container.appendChild(
+          App.el("section", { class: "section" }, [
+            App.sectionHeader("LINE通知の利用状況", { icon: "info" }),
+            App.el("div", { class: "card card--lg" }, [
+              App.el("p", {
+                style: "font-size: var(--text-sub); color: var(--color-text-secondary); margin-bottom: var(--spacing-3);",
+                text: "世帯を作った人にだけ表示されます。LINE無料プランの月200通の使いぐあいを確認できます。",
+              }),
+              statusBtn,
+            ]),
+          ])
+        );
+      }
     },
   };
+
+  // クォータの用途キーを日本語表示にする(管理者向け表示専用)
+  function quotaPurposeLabel(key) {
+    const labels = {
+      digest: "朝ダイジェスト",
+      reply: "返信",
+      immediate: "すぐのお知らせ",
+      assigned: "担当のお知らせ",
+      evening: "夜のお知らせ",
+      completion_share: "完了の共有",
+      shopping_update: "買い物",
+      plant_minor: "植物",
+      important: "重要なお知らせ",
+      test: "テスト",
+    };
+    return labels[key] || key;
+  }
 
   // ============================================
   // データ管理 — 破壊的操作はここの奥に置く(誤操作防止のため

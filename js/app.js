@@ -208,6 +208,8 @@ window.App = window.App || {};
     App.store.load();
     App.initLiff(() => {
       render();
+      // LINE経由で開かれた回数の匿名計測(1日1回だけ。フラグOFFなら何もしない)
+      if (App.trackAppOpened) App.trackAppOpened();
       // LIFF準備後に世帯データを取得(未設定・未参加なら何もしない)
       if (App.sync && App.sync.init) App.sync.init();
       // 開いている間、相手の変更を定期的に取りに行く(画面が裏のあいだは休止)

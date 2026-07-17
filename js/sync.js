@@ -13,7 +13,7 @@ window.App = window.App || {};
 
 (function () {
   const cfg = () => window.APP_CONFIG || {};
-  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes", "weather", "contacts"];
+  const SHARED_KEYS = ["family", "events", "tasks", "shopping", "shoppingFrequent", "plants", "notes", "weather", "contacts", "inboxItems", "notificationCenter"];
 
   App.sync = {
     _timer: null,
@@ -87,6 +87,12 @@ window.App = window.App || {};
       if (r.household === null) {
         App.store.update((st) => { delete st.settings.householdId; });
         return { removed: true };
+      }
+      // 世帯の管理者(最初のメンバー)かどうか。LINE通知の利用状況(クォータ)表示の出し分けに使う。
+      // 古いGAS(adminを返さない)でも従来どおり動くようundefinedはそのまま無視する
+      if (r.admin !== undefined && App.store.state.settings.isHouseholdAdmin !== r.admin) {
+        App.store.state.settings.isHouseholdAdmin = r.admin;
+        App.store.saveLocal();
       }
       const localAt = App.store.state.settings.syncedAt || 0;
       if (r.data && r.updatedAt && r.updatedAt > localAt) {
