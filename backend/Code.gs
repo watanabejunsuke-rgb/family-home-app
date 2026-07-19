@@ -1459,7 +1459,18 @@ function appendNotificationCenterNoLock_(householdId, entry) {
 // ============================================
 // Webhookの冪等性 — webhookEventId を記録し、同じイベントを二度処理しない
 // ============================================
+// 「確認して無ければ追記する」をロック無しで行うと、LINE側の再送が同時に
+// 複数届いた場合に、両方とも「まだ無い」と判定して両方処理してしまう競合の
+// 隙が生まれる(2026-07-19、実際にLINEが短時間に8回再送する状況で発覚)。
+// LockServiceで確認〜追記を1つの塊にして、この隙を無くす
 function isDuplicateWebhookEventAndMark_(id, type) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (e) {
+    Logger.log('webhook dedupe lock failed: ' + e);
+    return false; // ロックが取れない場合も処理は止めない(安全側)
+  }
   try {
     var sh = sheetByName_(WEBHOOK_SHEET_NAME);
     if (!sh || sh.getLastColumn() === 0) return false; // 未セットアップなら従来どおり素通し
@@ -1475,6 +1486,8 @@ function isDuplicateWebhookEventAndMark_(id, type) {
   } catch (e) {
     Logger.log('webhook dedupe failed: ' + e);
     return false; // 判定できないときは処理を止めない
+  } finally {
+    lock.releaseLock();
   }
 }
 
