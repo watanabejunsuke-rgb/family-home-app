@@ -395,6 +395,51 @@ App.screens = App.screens || {};
       content.push(convert);
     }
 
+    // メモは書いた後に「これは検討ノートだった/日記だった」と気づくことがあるので、タブをまたいで移せるようにする
+    if (isEdit && type === "memo") {
+      const moveNote = (newType) => {
+        const titleVal = titleInput.value.trim();
+        const bodyVal = bodyInput.value.trim();
+        const tagsVal = tagsInput.value.trim().split(/\s+/).filter(Boolean);
+        s.close();
+        clearTimeout(draftSaveTimer);
+        App.store.update((st) => {
+          const n = st.notes.find((x) => x.id === note.id);
+          if (!n) return;
+          n.tags = tagsVal;
+          n.updatedAt = Date.now();
+          if (newType === "diary") {
+            // 日記にタイトル欄はないので、本文の先頭に含めて引き継ぐ
+            n.type = "diary";
+            n.title = "";
+            n.body = titleVal ? `${titleVal}\n\n${bodyVal}` : bodyVal;
+            if (!n.date) n.date = App.date.today();
+          } else {
+            n.type = newType;
+            n.title = titleVal;
+            n.body = bodyVal;
+          }
+        });
+        App.toast(newType === "diary" ? "日記に移しました" : "検討ノートに移しました", "sparkle");
+      };
+
+      const moveToThread = App.el("button", {
+        class: "btn-secondary",
+        style: "margin-top: var(--spacing-3);",
+        html: App.icon("sparkle", 16) + "<span>検討ノートに移す</span>",
+      });
+      moveToThread.addEventListener("click", () => moveNote("thread"));
+      content.push(moveToThread);
+
+      const moveToDiary = App.el("button", {
+        class: "btn-secondary",
+        style: "margin-top: var(--spacing-3);",
+        html: App.icon("heart", 16) + "<span>日記にする</span>",
+      });
+      moveToDiary.addEventListener("click", () => moveNote("diary"));
+      content.push(moveToDiary);
+    }
+
     if (isEdit) {
       const del = App.el("button", { class: "btn-danger-text", html: App.icon("trash", 16) + "<span>削除する</span>" });
       del.addEventListener("click", () => {
