@@ -579,7 +579,8 @@
   /* 通常シートより縦に大きく取り、長文テンプレートでも本文が見渡せるようにする */
   max-height: 94dvh;
 }
-.textarea--note-body {
+/* `.field textarea`(components.css)より詳細度を上げて確実に上書きする */
+.field textarea.textarea--note-body {
   min-height: max(240px, 40dvh);
   /* iOSで16px未満だと入力時に自動ズームされてしまうため16px以上を維持 */
   font-size: 16px;
