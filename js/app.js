@@ -11,10 +11,20 @@ window.App = window.App || {};
     { route: "menu", label: "メニュー", icon: "menu" },
   ];
 
+  // iPhoneの「ホーム画面に追加」から起動された場合(=Safari UIの無いスタンドアロン
+  // 表示)は、カレンダーアプリの代わりとして使ってもらう想定なので、ホーム画面を経由
+  // せず直接カレンダーを開く。LINEのトーク・通常のSafari/Chromeタブから開いた場合は
+  // 従来どおりホーム画面(まず確認・今日の予定など)を表示する
+  function isStandaloneLaunch() {
+    return window.navigator.standalone === true
+      || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+
   // ルートは "plants" のような固定名の他に "plants/abc123" のようにIDを1つだけ
   // 付けられる(スラッシュ以降をparamとして画面に渡す)。それ以上の階層は今のところ不要。
   function currentHash() {
-    return (location.hash || "#home").slice(1);
+    if (location.hash) return location.hash.slice(1);
+    return isStandaloneLaunch() ? "calendar" : "home";
   }
   function parseRoute() {
     const raw = currentHash();
@@ -203,9 +213,14 @@ window.App = window.App || {};
   };
 
   // ---- 起動 ----
+  // LINEログイン確認(LIFF初期化)を待ってから初めて描画すると、通信状況によっては
+  // 数秒間まっしろな画面が続いてしまう。まず手元のデータ(localStorage)で即座に
+  // 画面を出し、ログイン確認・世帯データの取得は裏で進めて、終わり次第もう一度
+  // 描画し直す(表示名の更新・世帯共有データの反映など)。
   window.addEventListener("hashchange", render);
   document.addEventListener("DOMContentLoaded", () => {
     App.store.load();
+    render();
     App.initLiff(() => {
       render();
       // LINE経由で開かれた回数の匿名計測(1日1回だけ。フラグOFFなら何もしない)
