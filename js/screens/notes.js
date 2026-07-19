@@ -61,7 +61,10 @@ App.screens = App.screens || {};
 
     const titleInput = App.el("input", { type: "text", value: isEdit ? note.title : (draft && draft.title) || "", placeholder: "例:保育園の夏祭り" });
     const dateInput = App.el("input", { type: "date", value: isEdit ? note.date : (draft && draft.date) || App.date.today() });
-    const bodyInput = App.el("textarea", { placeholder: isDiary ? "今日あったこと、感じたことを自由に。" : "内容をメモしておきましょう。" });
+    const bodyInput = App.el("textarea", {
+      class: "textarea--note-body",
+      placeholder: isDiary ? "今日あったこと、感じたことを自由に。" : "気づいたこと、あとで見直したいことを書いてください",
+    });
     if (isEdit) bodyInput.value = note.body;
     else if (draft && draft.body) bodyInput.value = draft.body;
     const saveBtn = App.el("button", { class: "btn-primary", text: isEdit ? "変更を保存" : "保存する" });
@@ -215,8 +218,6 @@ App.screens = App.screens || {};
     }
     content.push(...tagFields);
 
-    content.push(saveBtn);
-
     // メモは「やること」に近い内容になることがあるので、ワンタップで移せる導線を置く
     if (isEdit && !isDiary) {
       const convert = App.el("button", {
@@ -262,10 +263,14 @@ App.screens = App.screens || {};
       content.push(del);
     }
 
+    // 保存ボタンは本文を広く取っても押しやすいよう、シート下部に固定して最後に置く
+    content.push(App.el("div", { class: "note-save-bar" }, [saveBtn]));
+
     const s = App.sheet(
       isEdit ? (isDiary ? "日記を編集" : "メモを編集") : isDiary ? "今日の日記" : "メモを追加",
       content
     );
+    s.node.classList.add("sheet--note-edit");
     saveBtn.addEventListener("click", () => {
       const body = bodyInput.value.trim();
       const title = titleInput.value.trim();

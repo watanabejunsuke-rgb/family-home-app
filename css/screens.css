@@ -574,6 +574,28 @@
   margin-top: var(--spacing-2);
 }
 
+/* ---- メモ・日記:編集シート(スマホで本文を広く書けるように) ---- */
+.sheet--note-edit {
+  /* 通常シートより縦に大きく取り、長文テンプレートでも本文が見渡せるようにする */
+  max-height: 94dvh;
+}
+.textarea--note-body {
+  min-height: max(240px, 40dvh);
+  /* iOSで16px未満だと入力時に自動ズームされてしまうため16px以上を維持 */
+  font-size: 16px;
+  line-height: 1.7;
+}
+/* 本文が伸びてスクロールが増えても、保存ボタンだけは常に手の届く位置に留める */
+.note-save-bar {
+  position: sticky;
+  bottom: 0;
+  margin: var(--spacing-4) calc(var(--spacing-5) * -1) calc(var(--spacing-6) * -1);
+  padding: var(--spacing-3) var(--spacing-5) calc(var(--spacing-3) + env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  box-shadow: 0 -6px 12px -6px rgba(43, 43, 43, 0.12);
+}
+.note-save-bar .btn-primary { margin-top: 0; }
+
 /* ---- 植物図鑑:お世話ごよみ(12ヶ月ピル) ---- */
 .pedia-task { margin-bottom: var(--spacing-3); }
 .pedia-task__label {
