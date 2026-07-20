@@ -125,6 +125,14 @@ window.App = window.App || {};
 
     // 変更→保存→再描画 を一括で行う
     update(mutator) {
+      // ホーム画面アイコンでログイン誘導をスキップした状態(js/liff.js)では、
+      // 保存してもサーバーへ送られず、次にpullReadOnlyが走った瞬間に消えてしまう。
+      // 「追加したのに気づかないうちに消えていた」を避けるため、この状態では
+      // 保存操作自体を行わず、その場で分かるようにする
+      if (App.liffState && App.liffState.needsLogin) {
+        App.toast("追加・編集はLINEのトークから開いて行ってください", "info");
+        return;
+      }
       mutator(this.state);
       // 自分で何か操作した時点で「サンプルデータ」ではなくなる
       if (this.state.isMockData) this.state.isMockData = false;
