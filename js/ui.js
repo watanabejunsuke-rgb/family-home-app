@@ -4,6 +4,13 @@
 window.App = window.App || {};
 
 (function () {
+  // LINE公式アカウントのトークを開くURL(js/config.jsのLINE_OA_ID未設定ならnull)。
+  // ホーム画面アイコンでログイン誘導をスキップした状態の案内(バナー・シート内両方)で使う
+  App.lineOpenUrl = function () {
+    const oaId = (window.APP_CONFIG || {}).LINE_OA_ID;
+    return oaId ? `https://line.me/R/ti/p/${encodeURIComponent(oaId)}` : null;
+  };
+
   // ---- DOM生成ヘルパー ----
   App.el = function (tag, attrs = {}, children = []) {
     const node = document.createElement(tag);
@@ -173,10 +180,16 @@ window.App = window.App || {};
     // 気づけないのはUXとして良くないので、シートを開いた瞬間・入力欄より前に
     // 案内を出す(入力し始める前に気づける)
     const needsLoginNotice = App.liffState && App.liffState.needsLogin
-      ? App.el("div", { class: "sheet-notice" }, [
-          App.el("span", { class: "sheet-notice__icon", html: App.icon("info", 15) }),
-          App.el("span", { class: "sheet-notice__text", text: "この内容は保存できません。追加・編集はLINEのトークから開いて行ってください。" }),
-        ])
+      ? (() => {
+          const openLineUrl = App.lineOpenUrl();
+          return App.el("div", { class: "sheet-notice" }, [
+            App.el("span", { class: "sheet-notice__icon", html: App.icon("info", 15) }),
+            App.el("span", { class: "sheet-notice__text", text: "この内容は保存できません。追加・編集はLINEのトークから開いて行ってください。" }),
+            openLineUrl
+              ? App.el("a", { class: "sheet-notice__link", href: openLineUrl, target: "_blank", rel: "noopener noreferrer", text: "LINEを開く" })
+              : null,
+          ]);
+        })()
       : null;
     const sheet = App.el("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title, tabindex: "-1" }, [
       App.el("div", { class: "sheet__grip" }),

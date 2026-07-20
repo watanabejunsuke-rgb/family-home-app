@@ -758,8 +758,9 @@
 /* ---- シート内の保存不可案内(ホーム画面アイコンでログイン誘導をスキップした状態) ---- */
 .sheet-notice {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--spacing-2);
+  gap: var(--spacing-1) var(--spacing-2);
   margin: 0 0 var(--spacing-4);
   padding: var(--spacing-3);
   border-radius: var(--radius-md);
@@ -768,7 +769,23 @@
 }
 .sheet-notice__icon { flex-shrink: 0; display: inline-flex; margin-top: 1px; }
 .sheet-notice__text {
+  flex: 1;
+  min-width: 60%;
   font-size: var(--text-caption);
   line-height: var(--line-height);
   color: var(--color-text-secondary);
+}
+.sheet-notice__link {
+  flex-shrink: 0;
+  margin-left: calc(15px + var(--spacing-2));
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-3);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-info);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  white-space: nowrap;
 }

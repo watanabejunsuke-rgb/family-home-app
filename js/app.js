@@ -193,8 +193,7 @@ window.App = window.App || {};
   // ということが起きないよう、全画面共通で常時目立たせておく
   function renderSyncBanner(main) {
     if (!App.liffState.needsLogin) return;
-    const oaId = (window.APP_CONFIG || {}).LINE_OA_ID;
-    const openLineUrl = oaId ? `https://line.me/R/ti/p/${encodeURIComponent(oaId)}` : null;
+    const openLineUrl = App.lineOpenUrl();
     main.appendChild(
       App.el("div", { class: "sync-banner" }, [
         App.el("span", { class: "sync-banner__icon", html: App.icon("info", 16) }),
