@@ -186,6 +186,26 @@ window.App = window.App || {};
     });
   }
 
+  // ---- 同期停止バナー ----
+  // ホーム画面アイコンでログイン誘導をスキップした状態(js/liff.js)では、
+  // 予定・やること等の追加はできてしまうが家族と共有されない(サーバーへ
+  // 送られない)。気づかず編集して「共有されたと思ったら実は自分の端末だけ」
+  // ということが起きないよう、全画面共通で常時目立たせておく
+  function renderSyncBanner(main) {
+    if (!App.liffState.needsLogin) return;
+    const oaId = (window.APP_CONFIG || {}).LINE_OA_ID;
+    const openLineUrl = oaId ? `https://line.me/R/ti/p/${encodeURIComponent(oaId)}` : null;
+    main.appendChild(
+      App.el("div", { class: "sync-banner" }, [
+        App.el("span", { class: "sync-banner__icon", html: App.icon("info", 16) }),
+        App.el("span", { class: "sync-banner__text", text: "この内容は最新でない場合があります。追加・編集を家族と共有するにはLINEのトークから開いてください。" }),
+        openLineUrl
+          ? App.el("a", { class: "sync-banner__link", href: openLineUrl, target: "_blank", rel: "noopener noreferrer", text: "LINEを開く" })
+          : null,
+      ])
+    );
+  }
+
   // ---- 画面描画 ----
   let lastRoute = null;
   function render() {
@@ -194,6 +214,7 @@ window.App = window.App || {};
     main.innerHTML = "";
     renderHeader(route, param);
     renderNav(route);
+    renderSyncBanner(main);
     App.screens[route].render(main, param);
     if (route !== lastRoute) {
       main.classList.remove("entering");

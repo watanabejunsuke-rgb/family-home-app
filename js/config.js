@@ -5,11 +5,15 @@
 // ============================================
 window.APP_CONFIG = {
   APP_NAME: "暮らしnote",
-  VERSION: "0.38.1",
+  VERSION: "0.38.2",
   LIFF_ID: "2010693415-ddc2Kd3X",
   // 世帯共有バックエンド(GAS)のウェブアプリURL。空のあいだは同期は完全に無効(端末内のみ)。
   // ※共有用の正しい形は /u/N/ を含まない .../macros/s/.../exec
   SYNC_URL: "https://script.google.com/macros/s/AKfycbzzvr5jG13CxFvWEdKTo75T-JEUvKSZGDfSIzrWgMskkeVP6ELOI6ADsN-uN1RzBYg/exec",
+  // LINE公式アカウントのベーシックID(LINE Developers「Messaging API設定」の
+  // 「ボットの基本ID」)。ホーム画面アイコンでログイン誘導をスキップした時、
+  // 「LINEを開く」導線に使う。値が違う場合はここだけ直せばよい
+  LINE_OA_ID: "@419xhscm",
 
   // 機能フラグ — falseにするとその機能のUI・処理が丸ごと無効になり、従来どおり動く。
   // バックエンド(GAS)側にも対応するフラグ(Script Propertiesの FLAG_*)があり、

@@ -32,6 +32,10 @@ window.App = window.App || {};
             || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
           if (isStandalone) {
             App.liffState.mode = "mock";
+            // このフラグが立っている間、画面上部に「LINEを開く」導線を常時表示する
+            // (js/app.jsのrenderSyncBanner)。予定の追加・編集はできてしまうが
+            // 家族と共有されない(サーバーへ送られない)ため、気づけるようにする
+            App.liffState.needsLogin = true;
             onReady();
             App.toast("最新の状態にするには、LINEのトークから開いてください", "info");
             return;
